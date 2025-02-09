@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { Contract } from "ethers";
 import * as fs from "fs";
+import { CONSTANTS } from "../libraries/constants";
 
 interface DeploymentInfo {
   factory: string;
@@ -21,8 +22,8 @@ async function main() {
   );
 
   // Get contract instances
-  const factory = await ethers.getContractAt("UniswapV2Factory", deploymentInfo.factory);
-  const router = await ethers.getContractAt("UniswapV2Router", deploymentInfo.router);
+  const factory = new ethers.Contract(deploymentInfo.factory, CONSTANTS.FACTORY_ABI, deployer);
+  const router = new ethers.Contract(deploymentInfo.router, CONSTANTS.ROUTER_ABI, deployer);
   const usdc = await ethers.getContractAt("MockUSDC", deploymentInfo.usdc);
 
   // Get token instances
@@ -62,15 +63,10 @@ async function main() {
   for (const [name, token] of Object.entries(tokens)) {
     console.log(`\nCreating pool for ${name}/USDC...`);
     
-    // First create the pair
-    const pairExists = await factory.getPair(token.address, usdc.address);
-    if (pairExists === ethers.constants.AddressZero) {
-      console.log("Creating new pair...");
-      await factory.createPair(token.address, usdc.address);
-      console.log("Pair created");
-    } else {
-      console.log("Pair already exists");
-    }
+    // Create the pair
+    console.log("Creating new pair...");
+    await factory.createPair(token.address, usdc.address);
+    console.log("Pair created");
 
     // Then add liquidity
     console.log("Adding initial liquidity...");
@@ -83,7 +79,7 @@ async function main() {
       0, // slippage is unavoidable
       deployer.address,
       deadline,
-      { gasLimit: 5000000 } // Add explicit gas limit
+      { gasLimit: CONSTANTS.DEFAULT_GAS_LIMIT }
     );
     console.log(`Added liquidity for ${name}/USDC`);
   }
