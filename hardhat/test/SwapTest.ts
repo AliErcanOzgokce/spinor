@@ -13,7 +13,8 @@ describe("Swap Test", function () {
 
   const TOKEN_NAMES = ["LST1", "LST2", "LST3", "LST4", "LRT1", "LRT2", "LRT3", "LRT4"];
 
-  beforeEach(async function () {
+  // Deploy contracts and create pools once before all tests
+  before(async function () {
     [owner, addr1] = await ethers.getSigners();
 
     // Deploy Factory
@@ -53,7 +54,7 @@ describe("Swap Test", function () {
       await token.approve(router.address, tokenAmount);
     }
 
-    // Create pools and add liquidity
+    // Create pools and add initial liquidity
     const deadline = Math.floor(Date.now() / 1000) + 60 * 20;
     const initialTokenAmount = ethers.utils.parseEther("100000");
     const initialUsdcAmount = ethers.utils.parseUnits("100000", 6);
@@ -118,7 +119,12 @@ describe("Swap Test", function () {
     }
   });
 
-  it("Should create pools successfully", async function () {
+  // Reset any necessary state before each test
+  beforeEach(async function () {
+    // Reset approvals or other test-specific setup if needed
+  });
+
+  it("Should verify all pools are created and have liquidity", async function () {
     for (const [name, token] of Object.entries(tokens)) {
       console.log(`\nChecking ${name}/USDC pool...`);
       

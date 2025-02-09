@@ -27,6 +27,30 @@ contract UniswapV2Pair is IUniswapV2Pair, ERC20, ReentrancyGuard {
     
     constructor() ERC20("Uniswap V2", "UNI-V2") {}
     
+    function totalSupply() public view virtual override(ERC20, IUniswapV2Pair) returns (uint) {
+        return super.totalSupply();
+    }
+
+    function balanceOf(address owner) public view virtual override(ERC20, IUniswapV2Pair) returns (uint) {
+        return super.balanceOf(owner);
+    }
+
+    function allowance(address owner, address spender) public view virtual override(ERC20, IUniswapV2Pair) returns (uint) {
+        return super.allowance(owner, spender);
+    }
+
+    function approve(address spender, uint value) public virtual override(ERC20, IUniswapV2Pair) returns (bool) {
+        return super.approve(spender, value);
+    }
+
+    function transfer(address to, uint value) public virtual override(ERC20, IUniswapV2Pair) returns (bool) {
+        return super.transfer(to, value);
+    }
+
+    function transferFrom(address from, address to, uint value) public virtual override(ERC20, IUniswapV2Pair) returns (bool) {
+        return super.transferFrom(from, to, value);
+    }
+    
     function initialize(address _token0, address _token1) external {
         require(token0 == address(0) && token1 == address(0), 'UniswapV2: ALREADY_INITIALIZED');
         token0 = _token0;
