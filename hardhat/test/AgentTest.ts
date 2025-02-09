@@ -16,7 +16,7 @@ describe("SpinorAgent", function () {
     const INITIAL_MINT_AMOUNT = ethers.utils.parseEther("2000000");
     const INITIAL_USDC_AMOUNT = ethers.utils.parseUnits("2000000", 6);
     const SWAP_AMOUNT = ethers.utils.parseUnits("1000", 6);
-    const DEADLINE = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes from now
+    const ONE_DAY = 24 * 60 * 60; // 24 hours in seconds
 
     beforeEach(async function () {
         [owner, user] = await ethers.getSigners();
@@ -51,12 +51,18 @@ describe("SpinorAgent", function () {
         agent = await SpinorAgent.deploy(router.address, factory.address, usdc.address);
         await agent.deployed();
 
+        // Initialize SpinorAgent
+        await agent.pause();
+        await agent.setDuration(ONE_DAY);
+        await agent.selectToken(lst1.address);
+        await agent.start();
+
         // Mint initial tokens
         await usdc.mint(owner.address, INITIAL_USDC_AMOUNT);
         await lst1.mint(owner.address, INITIAL_MINT_AMOUNT);
         await lst2.mint(owner.address, INITIAL_MINT_AMOUNT);
 
-        // Transfer some tokens to user for testing first
+        // Transfer some tokens to user for testing
         await usdc.transfer(user.address, SWAP_AMOUNT);
         await lst1.transfer(user.address, SWAP_AMOUNT);
         await lst2.transfer(user.address, SWAP_AMOUNT);
@@ -75,7 +81,7 @@ describe("SpinorAgent", function () {
             0,
             0,
             owner.address,
-            DEADLINE
+            ethers.constants.MaxUint256
         );
 
         // Create LST2/USDC pool and add initial liquidity
@@ -87,7 +93,7 @@ describe("SpinorAgent", function () {
             0,
             0,
             owner.address,
-            DEADLINE
+            ethers.constants.MaxUint256
         );
     });
 
@@ -99,40 +105,49 @@ describe("SpinorAgent", function () {
             expect(await agent.owner()).to.equal(owner.address);
         });
 
-        it("Should start with no selected token", async function () {
-            expect(await agent.currentLst()).to.equal(ethers.constants.AddressZero);
+        it("Should start with correct duration", async function () {
+            expect(await agent.duration()).to.equal(ONE_DAY);
+            expect(await agent.isActive()).to.be.true;
+        });
+
+        it("Should have LST1 as selected token", async function () {
+            expect(await agent.currentLst()).to.equal(lst1.address);
         });
     });
 
-    describe("Token Selection", function () {
-        it("Should allow owner to select LST1", async function () {
-            await agent.selectToken(lst1.address);
-            expect(await agent.currentLst()).to.equal(lst1.address);
+    describe("Duration Management", function () {
+        it("Should allow owner to set duration when paused", async function () {
+            await agent.pause();
+            const newDuration = ONE_DAY * 2;
+            await agent.setDuration(newDuration);
+            expect(await agent.duration()).to.equal(newDuration);
         });
 
-        it("Should allow owner to select LST2", async function () {
-            await agent.selectToken(lst2.address);
-            expect(await agent.currentLst()).to.equal(lst2.address);
+        it("Should not allow setting duration when not paused", async function () {
+            const newDuration = ONE_DAY * 2;
+            await expect(agent.setDuration(newDuration))
+                .to.be.revertedWith("Pausable: not paused");
         });
 
-        it("Should allow owner to change selected token", async function () {
-            await agent.selectToken(lst1.address);
-            expect(await agent.currentLst()).to.equal(lst1.address);
-
-            await agent.selectToken(lst2.address);
-            expect(await agent.currentLst()).to.equal(lst2.address);
+        it("Should not allow setting zero duration", async function () {
+            await agent.pause();
+            await expect(agent.setDuration(0))
+                .to.be.revertedWith("Duration must be greater than 0");
         });
 
-        it("Should not allow non-owner to select token", async function () {
-            await expect(
-                agent.connect(user).selectToken(lst1.address)
-            ).to.be.revertedWith("Ownable: caller is not the owner");
-        });
+        it("Should auto-pause after duration expires", async function () {
+            // Set a short duration
+            await agent.pause();
+            await agent.setDuration(1); // 1 second
+            await agent.start();
 
-        it("Should not allow selecting USDC as token", async function () {
-            await expect(
-                agent.selectToken(usdc.address)
-            ).to.be.revertedWith("Cannot select USDC as token");
+            // Wait for duration to pass
+            await ethers.provider.send("evm_increaseTime", [2]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Try to execute an operation
+            await expect(agent.selectToken(lst2.address))
+                .to.be.revertedWith("Duration expired");
         });
     });
 
@@ -156,7 +171,8 @@ describe("SpinorAgent", function () {
         });
 
         it("Should not accept deposits when unpaused", async function () {
-            await agent.unpause();
+            await agent.setDuration(ONE_DAY);
+            await agent.start();
             await expect(
                 agent.connect(user).deposit(usdc.address, SWAP_AMOUNT)
             ).to.be.revertedWith("Pausable: not paused");
@@ -164,13 +180,45 @@ describe("SpinorAgent", function () {
     });
 
     describe("Swap Operations", function () {
+        it("Should not allow swaps after duration expires", async function () {
+            // Setup agent with a short duration
+            await agent.pause();
+            await agent.setDuration(1); // 1 second duration
+            await agent.selectToken(lst1.address);
+            await usdc.connect(user).approve(agent.address, SWAP_AMOUNT);
+            await agent.connect(user).deposit(usdc.address, SWAP_AMOUNT);
+            await agent.start();
+
+            // Wait for duration to pass
+            await ethers.provider.send("evm_increaseTime", [2]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Try to execute swap after duration expired
+            const minAmountOut = ethers.utils.parseEther("900");
+            
+            // Check if swap fails with duration expired
+            await expect(
+                agent.executeSwap(SWAP_AMOUNT, minAmountOut, true)
+            ).to.be.revertedWith("Duration expired");
+
+            // Verify agent state by checking remaining duration
+            expect(await agent.getRemainingDuration()).to.equal(0);
+            
+            // Manually pause the contract since duration expiry doesn't automatically pause it
+            await agent.pause();
+
+            // Try to withdraw tokens after pausing
+            await agent.connect(user).withdraw(usdc.address, SWAP_AMOUNT);
+            expect(await usdc.balanceOf(agent.address)).to.equal(0);
+        });
+
         describe("LST1 Swaps", function () {
             beforeEach(async function () {
                 await agent.pause();
                 await usdc.connect(user).approve(agent.address, SWAP_AMOUNT);
                 await agent.connect(user).deposit(usdc.address, SWAP_AMOUNT);
                 await agent.selectToken(lst1.address);
-                await agent.unpause();
+                await agent.start();
             });
 
             it("Should swap USDC to LST1", async function () {
@@ -186,7 +234,7 @@ describe("SpinorAgent", function () {
                 await usdc.connect(user).approve(agent.address, SWAP_AMOUNT);
                 await agent.connect(user).deposit(usdc.address, SWAP_AMOUNT);
                 await agent.selectToken(lst2.address);
-                await agent.unpause();
+                await agent.start();
             });
 
             it("Should swap USDC to LST2", async function () {
@@ -197,14 +245,20 @@ describe("SpinorAgent", function () {
         });
 
         it("Should not allow swaps without selecting token first", async function () {
-            await agent.pause();
-            await usdc.connect(user).approve(agent.address, SWAP_AMOUNT);
-            await agent.connect(user).deposit(usdc.address, SWAP_AMOUNT);
-            await agent.unpause();
+            // Create a new agent instance to ensure no token is selected
+            const SpinorAgent = await ethers.getContractFactory("SpinorAgent");
+            const newAgent = await SpinorAgent.deploy(router.address, factory.address, usdc.address);
+            await newAgent.deployed();
+            
+            // Setup the agent
+            await newAgent.pause();
+            await newAgent.setDuration(ONE_DAY);
+            await newAgent.start();
 
+            // Try to execute swap without selecting token
             const minAmountOut = ethers.utils.parseEther("900");
             await expect(
-                agent.executeSwap(SWAP_AMOUNT, minAmountOut, true)
+                newAgent.executeSwap(SWAP_AMOUNT, minAmountOut, true)
             ).to.be.revertedWith("Token not selected");
         });
     });

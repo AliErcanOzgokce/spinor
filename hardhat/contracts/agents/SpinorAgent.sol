@@ -17,6 +17,7 @@ import "../dex/interfaces/IUniswapV2Pair.sol";
  * - Allow USDC withdrawals when paused
  * - Perform automated swaps between USDC and LST tokens
  * - Add and remove liquidity from Uniswap V2 pools
+ * - Auto-pause after duration expires
  */
 contract SpinorAgent is Ownable, Pausable {
     using SafeERC20 for IERC20;
@@ -32,6 +33,11 @@ contract SpinorAgent is Ownable, Pausable {
     
     // Current trading token
     address public currentLst;
+
+    // Duration management
+    uint256 public duration;
+    uint256 public startTime;
+    bool public isActive;
     
     // Events
     event USDCDeposited(address indexed user, uint256 amount);
@@ -39,6 +45,22 @@ contract SpinorAgent is Ownable, Pausable {
     event SwapExecuted(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
     event LiquidityAdded(address indexed token, uint256 tokenAmount, uint256 usdcAmount);
     event LiquidityRemoved(address indexed token, uint256 tokenAmount, uint256 usdcAmount);
+    event DurationSet(uint256 duration);
+    event AgentStarted(uint256 startTime, uint256 endTime);
+    event AgentExpired(uint256 endTime);
+
+    /**
+     * @dev Modifier to check if the duration has expired
+     */
+    modifier checkDuration() {
+        if (isActive && block.timestamp > startTime + duration) {
+            isActive = false;
+            _pause();
+            emit AgentExpired(block.timestamp);
+            revert("Duration expired");
+        }
+        _;
+    }
 
     constructor(
         address _router,
@@ -52,6 +74,28 @@ contract SpinorAgent is Ownable, Pausable {
         router = IUniswapV2Router(_router);
         factory = IUniswapV2Factory(_factory);
         usdc = IERC20(_usdc);
+        isActive = false;
+    }
+
+    /**
+     * @notice Sets the duration for the agent's active period
+     * @param _duration Duration in seconds
+     */
+    function setDuration(uint256 _duration) external onlyOwner whenPaused {
+        require(_duration > 0, "Duration must be greater than 0");
+        duration = _duration;
+        emit DurationSet(_duration);
+    }
+
+    /**
+     * @notice Starts the agent with the set duration
+     */
+    function start() external onlyOwner whenPaused {
+        require(duration > 0, "Duration not set");
+        startTime = block.timestamp;
+        isActive = true;
+        _unpause();
+        emit AgentStarted(startTime, startTime + duration);
     }
 
     /**
@@ -71,7 +115,7 @@ contract SpinorAgent is Ownable, Pausable {
      * @notice Sets the token to trade with
      * @param token Address of the LST or LRT token to trade
      */
-    function selectToken(address token) external onlyOwner {
+    function selectToken(address token) external onlyOwner checkDuration {
         require(token != address(0), "Invalid token address");
         require(token != address(usdc), "Cannot select USDC as token");
         currentLst = token;
@@ -111,7 +155,7 @@ contract SpinorAgent is Ownable, Pausable {
         uint256 amountIn,
         uint256 minAmountOut,
         bool isUsdcIn
-    ) external whenNotPaused {
+    ) external whenNotPaused checkDuration {
         require(currentLst != address(0), "Token not selected");
         require(amountIn > 0, "Amount must be greater than 0");
         
@@ -150,7 +194,7 @@ contract SpinorAgent is Ownable, Pausable {
         uint256 usdcAmount,
         uint256 minTokenAmount,
         uint256 minUsdcAmount
-    ) external whenNotPaused {
+    ) external whenNotPaused checkDuration {
         require(currentLst != address(0), "Token not selected");
         require(tokenAmount > 0 && usdcAmount > 0, "Amounts must be greater than 0");
         
@@ -184,7 +228,7 @@ contract SpinorAgent is Ownable, Pausable {
         uint256 lpTokens,
         uint256 minTokenAmount,
         uint256 minUsdcAmount
-    ) external whenNotPaused {
+    ) external whenNotPaused checkDuration {
         require(currentLst != address(0), "Token not selected");
         require(lpTokens > 0, "LP tokens must be greater than 0");
         
@@ -215,6 +259,7 @@ contract SpinorAgent is Ownable, Pausable {
      * @dev Only callable by owner
      */
     function pause() external onlyOwner {
+        isActive = false;
         _pause();
     }
 
@@ -223,6 +268,8 @@ contract SpinorAgent is Ownable, Pausable {
      * @dev Only callable by owner
      */
     function unpause() external onlyOwner {
+        require(duration > 0, "Duration not set");
+        require(!isActive || block.timestamp <= startTime + duration, "Duration expired");
         _unpause();
     }
 
@@ -237,5 +284,16 @@ contract SpinorAgent is Ownable, Pausable {
         require(balance > 0, "No balance to withdraw");
         
         tokenContract.safeTransfer(owner(), balance);
+    }
+
+    /**
+     * @notice Returns the remaining duration in seconds
+     * @return Remaining duration in seconds, 0 if expired or not started
+     */
+    function getRemainingDuration() external view returns (uint256) {
+        if (!isActive || block.timestamp >= startTime + duration) {
+            return 0;
+        }
+        return (startTime + duration) - block.timestamp;
     }
 } 

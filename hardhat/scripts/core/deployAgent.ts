@@ -40,15 +40,30 @@ async function main() {
     // Initialize the agent
     console.log("\nInitializing SpinorAgent...");
     
-    // Pause the agent initially for safety
+    // Pause the contract first
+    console.log("Pausing the agent...");
     await agent.pause();
-    console.log("Agent paused for safety");
+    console.log("Agent paused");
+
+    // Set initial duration (24 hours)
+    console.log("Setting duration...");
+    const ONE_DAY = 24 * 60 * 60; // 24 hours in seconds
+    await agent.setDuration(ONE_DAY);
+    console.log("Duration set to 24 hours");
+
+    // Verify the configuration
+    const duration = await agent.duration();
+    const isPaused = await agent.paused();
+    console.log("\nVerifying configuration:");
+    console.log("- Duration:", duration.toString(), "seconds");
+    console.log("- Paused:", isPaused);
 
     console.log("\nDeployment completed successfully!");
     console.log("You can now:");
     console.log("1. Use the agent address:", agent.address);
-    console.log("2. Unpause the agent when ready using the owner account");
-    console.log("3. Start trading by selecting tokens and adding liquidity");
+    console.log("2. Configure the agent (select tokens, etc.)");
+    console.log("3. Start the agent using the start() function");
+    console.log("4. The agent will automatically pause after 24 hours");
 }
 
 main()
