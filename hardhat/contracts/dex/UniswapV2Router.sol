@@ -122,10 +122,21 @@ contract UniswapV2Router {
         amounts[0] = amountIn;
         
         for (uint i; i < path.length - 1; i++) {
-            (uint reserveIn, uint reserveOut,) = IUniswapV2Pair(IUniswapV2Factory(factory).getPair(path[i], path[i + 1])).getReserves();
+            address pair = IUniswapV2Factory(factory).getPair(path[i], path[i + 1]);
+            IUniswapV2Pair pairContract = IUniswapV2Pair(pair);
+            (uint reserve0, uint reserve1,) = pairContract.getReserves();
+            address token0 = pairContract.token0();
+            
+            (uint reserveIn, uint reserveOut) = path[i] == token0 
+                ? (reserve0, reserve1) 
+                : (reserve1, reserve0);
+                
             amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
         }
         require(amounts[amounts.length - 1] >= amountOutMin, 'UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT');
+
+        // Transfer tokens to the first pair
+        IERC20(path[0]).safeTransferFrom(msg.sender, IUniswapV2Factory(factory).getPair(path[0], path[1]), amounts[0]);
         
         _swap(amounts, path, to);
     }

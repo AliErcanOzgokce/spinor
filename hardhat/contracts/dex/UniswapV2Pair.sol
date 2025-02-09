@@ -12,6 +12,7 @@ contract UniswapV2Pair is IUniswapV2Pair, ERC20, ReentrancyGuard {
     using UQ112x112 for uint224;
 
     uint public constant MINIMUM_LIQUIDITY = 10**3;
+    address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
     
     address public token0;
     address public token1;
@@ -62,7 +63,7 @@ contract UniswapV2Pair is IUniswapV2Pair, ERC20, ReentrancyGuard {
         uint _totalSupply = totalSupply();
         if (_totalSupply == 0) {
             liquidity = Math.sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
-            _mint(address(0), MINIMUM_LIQUIDITY);
+            _mint(DEAD_ADDRESS, MINIMUM_LIQUIDITY);
         } else {
             liquidity = Math.min(amount0 * _totalSupply / _reserve0, amount1 * _totalSupply / _reserve1);
         }
