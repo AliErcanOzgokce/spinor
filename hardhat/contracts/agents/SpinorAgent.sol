@@ -159,7 +159,7 @@ contract SpinorAgent is Ownable, Pausable {
         IERC20(address(usdc)).safeApprove(address(router), usdcAmount);
         
         // Add liquidity
-        (uint256 amountToken, uint256 amountUsdc, uint256 liquidity) = 
+        (uint256 amountToken, uint256 amountUsdc,) = 
             router.addLiquidity(
                 currentLst,
                 address(usdc),

@@ -10,9 +10,19 @@ async function main() {
         fs.readFileSync("deployment.json", "utf-8")
     );
 
+    console.log("Using addresses:", {
+        router: deploymentInfo.router,
+        factory: deploymentInfo.factory,
+        usdc: deploymentInfo.usdc
+    });
+
     // Deploy SpinorAgent
     const SpinorAgent = await ethers.getContractFactory("SpinorAgent");
-    const agent = await SpinorAgent.deploy();
+    const agent = await SpinorAgent.deploy(
+        deploymentInfo.router,
+        deploymentInfo.factory,
+        deploymentInfo.usdc
+    );
     await agent.deployed();
     console.log("SpinorAgent deployed to:", agent.address);
 
@@ -26,6 +36,19 @@ async function main() {
     );
 
     console.log("Deployment info updated!");
+
+    // Initialize the agent
+    console.log("\nInitializing SpinorAgent...");
+    
+    // Pause the agent initially for safety
+    await agent.pause();
+    console.log("Agent paused for safety");
+
+    console.log("\nDeployment completed successfully!");
+    console.log("You can now:");
+    console.log("1. Use the agent address:", agent.address);
+    console.log("2. Unpause the agent when ready using the owner account");
+    console.log("3. Start trading by selecting tokens and adding liquidity");
 }
 
 main()

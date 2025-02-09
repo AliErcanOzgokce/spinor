@@ -1,6 +1,6 @@
 # Uniswap V2 Implementation with LST and LRT Tokens
 
-This project implements a Uniswap V2-like decentralized exchange (DEX) with custom Liquid Staking Tokens (LST) and Liquid Restaking Tokens (LRT). It includes smart contracts for the DEX infrastructure, token contracts, and helper services for interacting with the protocol.
+This project implements a Uniswap V2-like decentralized exchange (DEX) with custom Liquid Staking Tokens (LST) and Liquid Restaking Tokens (LRT), along with an automated trading agent. It includes smart contracts for the DEX infrastructure, token contracts, and helper services for interacting with the protocol.
 
 ## Features
 
@@ -13,6 +13,14 @@ This project implements a Uniswap V2-like decentralized exchange (DEX) with cust
   - Factory contract for creating and managing token pairs
   - Router contract for handling swaps and liquidity operations
   - Pair contract implementing the AMM logic
+
+- **Automated Trading Agent**
+  - SpinorAgent contract for automated trading operations
+  - Supports USDC deposits and withdrawals
+  - Automated swaps between USDC and LST/LRT tokens
+  - Liquidity provision and removal
+  - Emergency withdrawal functionality
+  - Pausable operations for safety
 
 - **TypeScript Services**
   - `UniswapService`: Base service with common functionality
@@ -27,7 +35,8 @@ hardhat/
 │   ├── dex/              # DEX core contracts
 │   │   ├── interfaces/   # Contract interfaces
 │   │   └── libraries/    # Helper libraries
-│   └── tokens/           # ERC20 token contracts
+│   ├── tokens/           # ERC20 token contracts
+│   └── agents/           # Trading agent contracts
 ├── scripts/
 │   ├── core/            # Deployment and setup 
 │   ├── dex/            # DEX interaction services
@@ -90,6 +99,11 @@ npx hardhat run scripts/core/deploy.ts --network localhost
 npx hardhat run scripts/core/createPools.ts --network localhost
 ```
 
+4. Deploy the SpinorAgent:
+```bash
+npx hardhat run scripts/core/deployAgent.ts --network localhost
+```
+
 ## Usage Examples
 
 ### Running the Full Example
@@ -101,20 +115,23 @@ npx hardhat run scripts/examples/fullExample.ts --network localhost
 ```
 
 This example includes:
-- Minting tokens
-- Creating a liquidity pool
-- Adding liquidity
-- Performing swaps
-- Removing liquidity
+- Pool status checking and reserve monitoring
+- Token minting with proper decimals
+- Creating liquidity pools if needed
+- Adding liquidity with slippage protection
+- Performing swaps with price impact calculation
+- Removing liquidity safely
+- Error handling and balance tracking
 
 ### Key Features Demonstrated in Tests
 
-The `SwapTest.ts` file includes comprehensive tests showing:
-- Pool creation for all token pairs
+The test files include comprehensive tests showing:
+- Pool creation and management
 - Initial liquidity provision
-- Swap operations in both directions
-- Slippage protection
+- Swap operations with slippage protection
+- Automated trading via SpinorAgent
 - Event emission verification
+- Error handling and edge cases
 
 ## Smart Contract Details
 
@@ -135,6 +152,14 @@ The `SwapTest.ts` file includes comprehensive tests showing:
 - Handles token swaps
 - Maintains reserves and price accumulators
 
+### SpinorAgent Contract
+- Automated trading operations
+- Deposit/withdrawal functionality
+- Swap execution with slippage protection
+- Liquidity management
+- Emergency controls
+- Access control and pausability
+
 ## TypeScript Services
 
 ### UniswapService
@@ -147,15 +172,25 @@ Base service providing:
 ### LiquidityService
 Handles:
 - Adding liquidity with slippage protection
-- Removing liquidity
+- Removing liquidity safely
 - LP token management
+- Reserve monitoring
 
 ### SwapService
 Manages:
-- Token swaps
+- Token swaps with slippage protection
 - Price impact calculations
-- Slippage protection
 - Minimum output enforcement
+- Error handling
+
+## Security Features
+
+- Slippage protection on all trades
+- Pausable operations
+- Access control for critical functions
+- Emergency withdrawal mechanism
+- Reserve monitoring and validation
+- Comprehensive error handling
 
 ## Contributing
 
