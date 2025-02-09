@@ -19,6 +19,6 @@ export interface UniswapConfig {
 }
 
 export interface TokenPair {
-    tokenA: Contract;
-    tokenB: Contract;
+    tokenA: string;
+    tokenB: string;
 } 

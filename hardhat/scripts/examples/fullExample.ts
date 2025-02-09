@@ -2,7 +2,6 @@ import { ethers } from "hardhat";
 import { LiquidityService } from "../dex/LiquidityService";
 import { SwapService } from "../dex/SwapService";
 import * as fs from "fs";
-import { CONSTANTS } from "../libraries/constants";
 
 async function main() {
     const [signer] = await ethers.getSigners();
@@ -19,15 +18,11 @@ async function main() {
         signer
     };
 
-    const liquidityService = new LiquidityService(config);
-    const swapService = new SwapService(config);
+    const liquidityService = await LiquidityService.initialize(config);
+    const swapService = await SwapService.initialize(config);
 
     // Get contract instances
-    const factory = new ethers.Contract(
-        deploymentInfo.factory,
-        CONSTANTS.FACTORY_ABI,
-        signer
-    );
+    const factory = await ethers.getContractAt("UniswapV2Factory", deploymentInfo.factory, signer);
     const usdc = await ethers.getContractAt("MockUSDC", deploymentInfo.usdc);
     const lst1 = await ethers.getContractAt("LST1", deploymentInfo.tokens.LST1);
 
@@ -36,7 +31,7 @@ async function main() {
     let pairAddress = await factory.getPair(lst1.address, usdc.address);
     console.log("Initial pair address:", pairAddress);
     
-    if (pairAddress === CONSTANTS.ZERO_ADDRESS) {
+    if (pairAddress === ethers.constants.AddressZero) {
         console.log("\nCreating new liquidity pool...");
         await factory.createPair(lst1.address, usdc.address);
         pairAddress = await factory.getPair(lst1.address, usdc.address);
@@ -44,13 +39,6 @@ async function main() {
     } else {
         console.log("Pair already exists");
     }
-
-    // Get pair contract
-    const pair = new ethers.Contract(
-        pairAddress,
-        CONSTANTS.PAIR_ABI,
-        signer
-    );
 
     // Mint tokens
     console.log("\nMinting Tokens");
@@ -63,19 +51,13 @@ async function main() {
     console.log("Minted LST1:", ethers.utils.formatEther(mintAmount));
     console.log("Minted USDC:", ethers.utils.formatUnits(usdcMintAmount, 6));
 
-    // Approve tokens
-    console.log("\nApproving Tokens");
-    await lst1.approve(config.routerAddress, ethers.constants.MaxUint256);
-    await usdc.approve(config.routerAddress, ethers.constants.MaxUint256);
-    console.log("Tokens approved for trading");
-
     // Example 1: Add Liquidity
     console.log("\nAdding Liquidity Example:");
     const addLiquidityAmount = ethers.utils.parseEther("50000");
     const usdcAmount = ethers.utils.parseUnits("50000", 6);
 
     const liquidityResult = await liquidityService.addLiquidity(
-        { tokenA: lst1, tokenB: usdc },
+        { tokenA: lst1.address, tokenB: usdc.address },
         addLiquidityAmount,
         usdcAmount
     );
@@ -86,15 +68,11 @@ async function main() {
         lpTokens: ethers.utils.formatEther(liquidityResult.liquidity)
     });
 
-    // Get LP token balance
-    const lpBalance = await pair.balanceOf(signer.address);
-    console.log("\nLP Token Balance:", ethers.utils.formatEther(lpBalance));
-
     // Example 2: Calculate Swap
     console.log("\nCalculating Expected Swap Amount:");
     const swapAmount = ethers.utils.parseEther("100");
     const expectedAmount = await swapService.getExpectedOutputAmount(
-        { tokenA: lst1, tokenB: usdc },
+        { tokenA: lst1.address, tokenB: usdc.address },
         swapAmount
     );
 
@@ -106,7 +84,7 @@ async function main() {
     // Example 3: Execute Swap
     console.log("\nExecuting Swap:");
     const swapResult = await swapService.swap(
-        { tokenA: lst1, tokenB: usdc },
+        { tokenA: lst1.address, tokenB: usdc.address },
         swapAmount
     );
 
@@ -115,17 +93,17 @@ async function main() {
         amountOut: ethers.utils.formatUnits(swapResult, 6)
     });
 
+    // Get pair contract for LP token operations
+    const pair = await ethers.getContractAt("UniswapV2Pair", pairAddress);
+    const lpBalance = await pair.balanceOf(signer.address);
+
     // Example 4: Remove Liquidity
     console.log("\nRemoving Liquidity Example:");
     const lpTokenAmount = lpBalance.div(10); // Remove 10% of LP tokens
     console.log("Removing LP tokens:", ethers.utils.formatEther(lpTokenAmount));
 
-    // Approve LP tokens
-    await pair.approve(config.routerAddress, lpTokenAmount);
-    console.log("LP tokens approved");
-
     const removeLiquidityResult = await liquidityService.removeLiquidity(
-        { tokenA: lst1, tokenB: usdc },
+        { tokenA: lst1.address, tokenB: usdc.address },
         lpTokenAmount
     );
 
@@ -146,4 +124,4 @@ main()
     .catch((error) => {
         console.error(error);
         process.exit(1);
-    }); 
+    });

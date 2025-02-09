@@ -1,9 +1,21 @@
-import { Contract, ethers, BigNumber } from "ethers";
+import { Contract, BigNumber } from "ethers";
 import { UniswapService } from "./UniswapService";
-import { LiquidityResult, RemoveLiquidityResult, TokenPair } from "../libraries/types";
+import { TokenPair } from "../libraries/types";
 import { CONSTANTS } from "../libraries/constants";
+import { ethers as hardhatEthers } from "hardhat";
+import { UniswapConfig } from "../libraries/types";
 
 export class LiquidityService extends UniswapService {
+    private constructor(factory: Contract, router: Contract, signer: UniswapConfig["signer"]) {
+        super(factory, router, signer);
+    }
+
+    public static async initialize(config: UniswapConfig): Promise<LiquidityService> {
+        const factory = await hardhatEthers.getContractAt("UniswapV2Factory", config.factoryAddress, config.signer);
+        const router = await hardhatEthers.getContractAt("UniswapV2Router", config.routerAddress, config.signer);
+        return new LiquidityService(factory, router, config.signer);
+    }
+
     /**
      * Add liquidity to a pool
      */
@@ -12,41 +24,38 @@ export class LiquidityService extends UniswapService {
         amountADesired: BigNumber,
         amountBDesired: BigNumber,
         slippageTolerance: number = CONSTANTS.DEFAULT_SLIPPAGE_TOLERANCE
-    ): Promise<LiquidityResult> {
+    ) {
+        // Get token contracts
+        const tokenAContract = await hardhatEthers.getContractAt("IERC20", tokenA, this.signer);
+        const tokenBContract = await hardhatEthers.getContractAt("IERC20", tokenB, this.signer);
+
+        // Approve tokens if needed
+        await this.approveToken(tokenAContract, this.router.address, amountADesired);
+        await this.approveToken(tokenBContract, this.router.address, amountBDesired);
+
         // Calculate minimum amounts based on slippage tolerance
         const amountAMin = this.calculateMinAmount(amountADesired, slippageTolerance);
         const amountBMin = this.calculateMinAmount(amountBDesired, slippageTolerance);
 
-        // Approve router to spend tokens
-        await this.approveToken(tokenA, this.router.address, amountADesired);
-        await this.approveToken(tokenB, this.router.address, amountBDesired);
-
         // Add liquidity
         const tx = await this.router.addLiquidity(
-            tokenA.address,
-            tokenB.address,
+            tokenA,
+            tokenB,
             amountADesired,
             amountBDesired,
             amountAMin,
             amountBMin,
             this.signer.address,
-            this.getDeadline(),
-            { gasLimit: CONSTANTS.DEFAULT_GAS_LIMIT }
+            this.getDeadline()
         );
         const receipt = await tx.wait();
 
-        // Get pair contract
-        const pairAddress = await this.getPair(tokenA.address, tokenB.address);
-        const pair = new ethers.Contract(pairAddress, CONSTANTS.PAIR_ABI, this.signer);
-
-        // Get LP token balance change
-        const liquidityEvent = receipt.events?.find((e: any) => e.event === "Mint");
-        const liquidity = liquidityEvent ? liquidityEvent.args?.liquidity : await pair.balanceOf(this.signer.address);
-
+        // Get amounts from event logs
+        const event = receipt.events?.find((e: { event: string }) => e.event === "Mint");
         return {
-            amountA: amountADesired,
-            amountB: amountBDesired,
-            liquidity
+            amountA: event?.args?.amount0 || amountADesired,
+            amountB: event?.args?.amount1 || amountBDesired,
+            liquidity: event?.args?.liquidity || BigNumber.from(0)
         };
     }
 
@@ -57,39 +66,44 @@ export class LiquidityService extends UniswapService {
         { tokenA, tokenB }: TokenPair,
         liquidity: BigNumber,
         slippageTolerance: number = CONSTANTS.DEFAULT_SLIPPAGE_TOLERANCE
-    ): Promise<RemoveLiquidityResult> {
-        const pairAddress = await this.getPair(tokenA.address, tokenB.address);
-        const pair = new ethers.Contract(pairAddress, CONSTANTS.PAIR_ABI, this.signer);
+    ) {
+        // Get pair contract
+        const pairAddress = await this.getPair(tokenA, tokenB);
+        const pair = await hardhatEthers.getContractAt("UniswapV2Pair", pairAddress, this.signer);
 
-        // Get current reserves to calculate minimum amounts
-        const [reserve0, reserve1] = await this.getReserves(tokenA.address, tokenB.address);
+        // Approve LP tokens
+        await this.approveToken(pair, this.router.address, liquidity);
+
+        // Get current reserves and total supply to calculate minimum amounts
+        const [reserveA, reserveB] = await this.getReserves(tokenA, tokenB);
         const totalSupply = await pair.totalSupply();
         
-        const amountAMin = reserve0.mul(liquidity).div(totalSupply)
-            .mul(1000 - Math.floor(slippageTolerance * 10)).div(1000);
-        const amountBMin = reserve1.mul(liquidity).div(totalSupply)
-            .mul(1000 - Math.floor(slippageTolerance * 10)).div(1000);
+        const amountAMin = this.calculateMinAmount(
+            liquidity.mul(reserveA).div(totalSupply),
+            slippageTolerance
+        );
+        const amountBMin = this.calculateMinAmount(
+            liquidity.mul(reserveB).div(totalSupply),
+            slippageTolerance
+        );
 
-        // Approve router to spend LP tokens
-        await pair.approve(this.router.address, liquidity);
-
+        // Remove liquidity
         const tx = await this.router.removeLiquidity(
-            tokenA.address,
-            tokenB.address,
+            tokenA,
+            tokenB,
             liquidity,
             amountAMin,
             amountBMin,
             this.signer.address,
-            this.getDeadline(),
-            { gasLimit: CONSTANTS.DEFAULT_GAS_LIMIT }
+            this.getDeadline()
         );
         const receipt = await tx.wait();
 
-        // Parse the events to get the actual amounts
-        const burnEvent = receipt.events?.find((e: any) => e.event === "Burn");
+        // Get amounts from event logs
+        const event = receipt.events?.find((e: { event: string }) => e.event === "LiquidityRemoved");
         return {
-            amountA: burnEvent?.args?.amount0 || BigNumber.from(0),
-            amountB: burnEvent?.args?.amount1 || BigNumber.from(0)
+            amountA: event?.args?.amountA || amountAMin,
+            amountB: event?.args?.amountB || amountBMin
         };
     }
 } 

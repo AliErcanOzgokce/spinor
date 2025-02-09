@@ -8,23 +8,16 @@ export class UniswapService {
     protected router: Contract;
     protected signer: UniswapConfig["signer"];
 
-    constructor({ factoryAddress, routerAddress, signer }: UniswapConfig) {
+    protected constructor(factory: Contract, router: Contract, signer: UniswapConfig["signer"]) {
+        this.factory = factory;
+        this.router = router;
         this.signer = signer;
-        this.factory = new ethers.Contract(
-            factoryAddress,
-            [
-                "function getPair(address tokenA, address tokenB) external view returns (address pair)",
-                "function createPair(address tokenA, address tokenB) external returns (address pair)",
-                "function allPairs(uint) external view returns (address pair)",
-                "function allPairsLength() external view returns (uint)",
-            ],
-            signer
-        );
-        this.router = new ethers.Contract(
-            routerAddress,
-            CONSTANTS.ROUTER_ABI,
-            signer
-        );
+    }
+
+    public static async initialize({ factoryAddress, routerAddress, signer }: UniswapConfig): Promise<UniswapService> {
+        const factory = await hardhatEthers.getContractAt("UniswapV2Factory", factoryAddress, signer);
+        const router = await hardhatEthers.getContractAt("UniswapV2Router", routerAddress, signer);
+        return new UniswapService(factory, router, signer);
     }
 
     /**
@@ -66,11 +59,7 @@ export class UniswapService {
         tokenB: string
     ): Promise<[BigNumber, BigNumber]> {
         const pair = await this.getPair(tokenA, tokenB);
-        const pairContract = new ethers.Contract(
-            pair,
-            CONSTANTS.PAIR_ABI,
-            this.signer
-        );
+        const pairContract = await hardhatEthers.getContractAt("UniswapV2Pair", pair, this.signer);
         const [reserve0, reserve1] = await pairContract.getReserves();
         return tokenA < tokenB ? [reserve0, reserve1] : [reserve1, reserve0];
     }
