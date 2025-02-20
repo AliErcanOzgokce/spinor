@@ -20,6 +20,7 @@ export interface IDeployment {
     factory: string;
     router: string;
     usdc: string;
+    agent: string;
     tokens: {
         [key: string]: string;  // key: token name (LST1, LRT1, etc.), value: token address
     };

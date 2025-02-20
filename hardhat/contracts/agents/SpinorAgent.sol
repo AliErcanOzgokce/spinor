@@ -22,6 +22,10 @@ import "../dex/interfaces/IUniswapV2Pair.sol";
 contract SpinorAgent is Ownable, Pausable {
     using SafeERC20 for IERC20;
 
+    // Agent Strategy
+    uint256 public tradeStrategy;
+    uint256 public riskLevel;
+
     // Constants for calculations and limits
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_BPS = 10000; // 100%
@@ -65,7 +69,9 @@ contract SpinorAgent is Ownable, Pausable {
     constructor(
         address _router,
         address _factory,
-        address _usdc
+        address _usdc,
+        uint256 _tradeStrategy,
+        uint256 _riskLevel
     ) {
         require(_router != address(0), "Invalid router address");
         require(_factory != address(0), "Invalid factory address");
@@ -75,6 +81,8 @@ contract SpinorAgent is Ownable, Pausable {
         factory = IUniswapV2Factory(_factory);
         usdc = IERC20(_usdc);
         isActive = false;
+        tradeStrategy = _tradeStrategy;
+        riskLevel = _riskLevel;
     }
 
     /**

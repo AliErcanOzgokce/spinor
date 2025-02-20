@@ -59,7 +59,7 @@ async function main() {
 
   // Save to file
   fs.writeFileSync(
-    "deployment.json",
+    "deployments.json",
     JSON.stringify(deploymentInfo, null, 2)
   );
   console.log("\nDeployment info saved to deployment.json");

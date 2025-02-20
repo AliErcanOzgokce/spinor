@@ -7,7 +7,7 @@ async function main() {
 
     // Load existing deployment info
     const deploymentInfo = JSON.parse(
-        fs.readFileSync("deployment.json", "utf-8")
+        fs.readFileSync("deployments.json", "utf-8")
     );
 
     console.log("Using addresses:", {
@@ -21,7 +21,9 @@ async function main() {
     const agent = await SpinorAgent.deploy(
         deploymentInfo.router,
         deploymentInfo.factory,
-        deploymentInfo.usdc
+        deploymentInfo.usdc,
+        4,
+        5
     );
     await agent.deployed();
     console.log("SpinorAgent deployed to:", agent.address);
@@ -31,7 +33,7 @@ async function main() {
     
     // Save updated deployment info
     fs.writeFileSync(
-        "deployment.json",
+        "deployments.json",
         JSON.stringify(deploymentInfo, null, 2)
     );
 

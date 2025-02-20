@@ -246,4 +246,114 @@ app.get('/api/pool-reserves', async (req: Request, res: Response) => {
     }
 });
 
+app.get('/api/agent-info', async (req: Request, res: Response) => {
+    try {
+        // Read deployments file
+        const deploymentsData = await fs.readFile(config.deploymentPath, 'utf-8');
+        const deployments: IDeployment = JSON.parse(deploymentsData);
+
+        // Create agent contract instance with minimal ABI
+        const agentABI = [
+            'function tradeStrategy() public view returns (uint256)',
+            'function riskLevel() public view returns (uint256)'
+        ];
+        const agentContract = new Contract(deployments.agent, agentABI, uniswapService['provider']);
+
+        // Create ERC20 interface for token balance checks
+        const erc20ABI = [
+            'function balanceOf(address) view returns (uint256)',
+            'function decimals() view returns (uint8)',
+            'function symbol() view returns (string)'
+        ];
+
+        // Create factory contract instance for LP token checks
+        const factoryContract = new Contract(
+            deployments.factory,
+            ['function getPair(address tokenA, address tokenB) view returns (address)'],
+            uniswapService['provider']
+        );
+
+        // Get agent's configuration
+        const [tradeStrategy, riskLevel] = await Promise.all([
+            agentContract.tradeStrategy(),
+            agentContract.riskLevel()
+        ]);
+
+        // Get USDC balance
+        const usdcContract = new Contract(deployments.usdc, erc20ABI, uniswapService['provider']);
+        const [usdcDecimals, usdcBalance] = await Promise.all([
+            usdcContract.decimals(),
+            usdcContract.balanceOf(deployments.agent)
+        ]);
+
+        // Initialize arrays for token and LP balances
+        const tokenBalances = [];
+        const lpBalances = [];
+
+        // Process all LST and LRT tokens
+        const tokenEntries = Object.entries(deployments.tokens);
+        for (const [symbol, address] of tokenEntries) {
+            // Get token balance
+            const tokenContract = new Contract(address, erc20ABI, uniswapService['provider']);
+            const [decimals, balance] = await Promise.all([
+                tokenContract.decimals(),
+                tokenContract.balanceOf(deployments.agent)
+            ]);
+
+            // Get LP token balance
+            const pairAddress = await factoryContract.getPair(address, deployments.usdc);
+            let lpBalance = BigInt(0);
+
+            if (pairAddress && pairAddress !== '0x0000000000000000000000000000000000000000') {
+                const lpContract = new Contract(pairAddress, erc20ABI, uniswapService['provider']);
+                lpBalance = await lpContract.balanceOf(deployments.agent);
+            }
+
+            // Add token balance
+            tokenBalances.push({
+                symbol,
+                address,
+                balance: balance.toString(),
+                formatted: Number(balance) / 10 ** Number(decimals)
+            });
+
+            // Add LP balance
+            lpBalances.push({
+                symbol: `${symbol}/USDC`,
+                pairAddress,
+                balance: lpBalance.toString(),
+                formatted: Number(lpBalance) / 10 ** 18
+            });
+        }
+
+        // Prepare response
+        const response = {
+            success: true,
+            data: {
+                configuration: {
+                    tradeStrategy: Number(tradeStrategy),
+                    riskLevel: Number(riskLevel)
+                },
+                balances: {
+                    usdc: {
+                        balance: usdcBalance.toString(),
+                        formatted: Number(usdcBalance) / 10 ** Number(usdcDecimals)
+                    },
+                    tokens: tokenBalances,
+                    liquidityPools: lpBalances
+                }
+            },
+            message: 'Agent information retrieved successfully'
+        };
+
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching agent info:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to fetch agent information'
+        });
+    }
+});
+
 export { app }; 
