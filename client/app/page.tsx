@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import Link from 'next/link'
 import { ArrowTrendingUpIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
 
@@ -51,14 +52,16 @@ const PoolCard = ({ pool }: { pool: any }) => (
       </div>
 
       {/* Add Liquidity Button */}
-      <motion.button
-        className="ml-4 px-4 py-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 
-                 rounded-xl font-medium text-sm text-gray-900 dark:text-white transition-colors duration-200"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        Add Liquidity
-      </motion.button>
+      <Link href="/pool/add">
+        <motion.button
+          className="ml-4 px-4 py-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 
+                   rounded-xl font-medium text-sm text-gray-900 dark:text-white transition-colors duration-200"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          Add Liquidity
+        </motion.button>
+      </Link>
     </div>
   </motion.div>
 )

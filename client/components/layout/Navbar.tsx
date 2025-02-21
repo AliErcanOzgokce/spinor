@@ -84,7 +84,6 @@ const Navbar = () => {
 
         {/* Navigation Links */}
         <div className="hidden md:flex items-center space-x-6">
-          <NavLink href="/pool">Pool</NavLink>
           <NavLink href="/swap">Swap</NavLink>
           <NavLink href="/liquidity">Liquidity</NavLink>
           <NavLink href="/dashboard">Dashboard</NavLink>

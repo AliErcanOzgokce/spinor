@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowTrendingUpIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
 import CreateAgentModal from '@/components/dashboard/CreateAgentModal'
+import Link from 'next/link'
 
 // Stats Card Component
 const StatsCard = ({ title, value }: { title: string; value: string }) => (
@@ -179,16 +180,18 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">User Dashboard</h1>
           <div className="flex gap-4">
-            <motion.button
-              className="px-4 py-2 bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg rounded-xl 
-                       border border-gray-100/20 dark:border-white/[0.08] font-medium text-gray-900 
-                       dark:text-white hover:border-primary-500/20 dark:hover:border-primary-400/20 
-                       transition-colors duration-200"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              Liquidity Positions
-            </motion.button>
+            <Link href="/pool/remove">
+              <motion.button
+                className="px-4 py-2 bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg rounded-xl 
+                         border border-gray-100/20 dark:border-white/[0.08] font-medium text-gray-900 
+                         dark:text-white hover:border-primary-500/20 dark:hover:border-primary-400/20 
+                         transition-colors duration-200"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Liquidity Positions
+              </motion.button>
+            </Link>
             <motion.button
               onClick={() => setIsCreateModalOpen(true)}
               className="px-4 py-2 bg-primary-500 text-white rounded-xl font-medium 
