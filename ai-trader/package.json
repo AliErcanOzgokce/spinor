@@ -1,0 +1,29 @@
+{
+  "name": "ai-trader",
+  "version": "1.0.0",
+  "description": "AI Trading Bot for LST/LRT Analysis",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "openai": "^4.85.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
