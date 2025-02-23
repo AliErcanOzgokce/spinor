@@ -1,80 +1,86 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import Link from 'next/link'
-import { ArrowTrendingUpIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect, useMemo } from 'react'
+import { FunnelIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
-
-// Pool Card Component
-const PoolCard = ({ pool }: { pool: any }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="relative group"
-  >
-    {/* Hover Glow Effect */}
-    <div className="absolute -inset-0.5 bg-gradient-to-r from-primary-500/0 to-primary-600/0 group-hover:from-primary-500/10 
-                   group-hover:to-primary-600/10 dark:group-hover:from-primary-400/[0.08] dark:group-hover:to-primary-500/[0.08] 
-                   rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition duration-500" />
-    
-    <div className="relative flex items-center bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg rounded-xl 
-                  border border-gray-100/20 dark:border-white/[0.08] p-4 hover:border-primary-500/20 
-                  dark:hover:border-primary-400/20 transition-colors duration-300">
-      {/* Token Icons */}
-      <div className="flex -space-x-2 mr-4">
-        <div className="w-10 h-10 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center z-10">
-          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">E</span>
-        </div>
-        <div className="w-10 h-10 bg-primary-50 dark:bg-white/[0.05] rounded-full flex items-center justify-center">
-          <span className="text-sm font-medium text-primary-600 dark:text-primary-400">U</span>
-        </div>
-      </div>
-
-      {/* Pool Name */}
-      <div className="flex-1">
-        <h3 className="text-base font-medium text-gray-900 dark:text-white">ETH/USDC</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Uniswap V2</p>
-      </div>
-
-      {/* APY */}
-      <div className="px-4 text-right">
-        <div className="flex items-center justify-end gap-1 text-green-500 dark:text-green-400">
-          <ArrowTrendingUpIcon className="w-4 h-4" />
-          <span className="font-medium">7.23%</span>
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">APY</p>
-      </div>
-
-      {/* Price */}
-      <div className="px-4 text-right">
-        <p className="font-medium text-gray-900 dark:text-white">$2,843.65</p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Price</p>
-      </div>
-
-      {/* Add Liquidity Button */}
-      <Link href="/pool/add">
-        <motion.button
-          className="ml-4 px-4 py-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 
-                   rounded-xl font-medium text-sm text-gray-900 dark:text-white transition-colors duration-200"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          Add Liquidity
-        </motion.button>
-      </Link>
-    </div>
-  </motion.div>
-)
+import { PoolCard } from '@/components/pools/PoolCard'
+import { PoolCardSkeleton } from '@/components/pools/PoolCardSkeleton'
+import { FilterButton } from '@/components/pools/FilterButton'
+import { SortDropdown } from '@/components/pools/SortDropdown'
+import { PoolData, FilterType, SortField, SortOrder } from '@/components/pools/types'
+import { calculateTVL, calculatePrice } from '@/components/pools/utils'
 
 // Main Page Component
 export default function PoolsPage() {
-  // Mock data for pools
-  const pools = Array(6).fill({
-    name: 'ETH/USDC',
-    platform: 'Uniswap V2',
-    apy: '7.23',
-    price: '2,843.65'
+  const [pools, setPools] = useState<PoolData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Filtering and Sorting States
+  const [filterType, setFilterType] = useState<FilterType>('all')
+  const [sort, setSort] = useState<{ field: SortField; order: SortOrder }>({
+    field: 'tvl',
+    order: 'desc'
   })
+
+  useEffect(() => {
+    const fetchPools = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/pool-reserves')
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to fetch pool data')
+        }
+
+        setPools(result.data)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching pool data:', err)
+        setError('Failed to load pool data. Please try again later.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPools()
+  }, [])
+
+  // Filter and Sort Logic
+  const filteredAndSortedPools = useMemo(() => {
+    let filtered = [...pools]
+
+    // Apply filter
+    if (filterType !== 'all') {
+      filtered = filtered.filter(pool => 
+        filterType === 'lst' 
+          ? pool.token0Symbol.startsWith('LST')
+          : pool.token0Symbol.startsWith('LRT')
+      )
+    }
+
+    // Apply sort
+    filtered.sort((a, b) => {
+      let comparison = 0
+      switch (sort.field) {
+        case 'tvl':
+          comparison = calculateTVL(a.reserve0, a.reserve1) - calculateTVL(b.reserve0, b.reserve1)
+          break
+        case 'apy':
+          comparison = (a.apy ?? 0) - (b.apy ?? 0)
+          break
+        case 'price':
+          comparison = calculatePrice(a.reserve0, a.reserve1) - calculatePrice(b.reserve0, b.reserve1)
+          break
+        case 'slashing':
+          comparison = (a.slashingHistory ?? 0) - (b.slashingHistory ?? 0)
+          break
+      }
+      return sort.order === 'desc' ? -comparison : comparison
+    })
+
+    return filtered
+  }, [pools, filterType, sort])
 
   return (
     <>
@@ -88,12 +94,71 @@ export default function PoolsPage() {
           </p>
         </div>
 
+        {/* Updated Filter and Sort Controls */}
+        {!loading && !error && pools.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <FunnelIcon className="w-4 h-4 text-gray-400" />
+              <FilterButton 
+                active={filterType === 'all'} 
+                onClick={() => setFilterType('all')}
+              >
+                All
+              </FilterButton>
+              <FilterButton 
+                active={filterType === 'lst'} 
+                onClick={() => setFilterType('lst')}
+              >
+                LST Only
+              </FilterButton>
+              <FilterButton 
+                active={filterType === 'lrt'} 
+                onClick={() => setFilterType('lrt')}
+              >
+                LRT Only
+              </FilterButton>
+            </div>
+
+            <div className="ml-auto">
+              <SortDropdown
+                value={sort}
+                onChange={(field, order) => setSort({ field, order })}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <PoolCardSkeleton key={i} />
+            ))}
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
         {/* Pool List */}
-        <div className="space-y-3">
-          {pools.map((pool, index) => (
-            <PoolCard key={index} pool={pool} />
-          ))}
-        </div>
+        {!loading && !error && (
+          <div className="space-y-3">
+            {filteredAndSortedPools.map((pool) => (
+              <PoolCard key={pool.pairAddress} pool={pool} />
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && filteredAndSortedPools.length === 0 && (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            {pools.length === 0 ? 'No pools available at the moment.' : 'No pools match your filters.'}
+          </div>
+        )}
       </div>
     </>
   )

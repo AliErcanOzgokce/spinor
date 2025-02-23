@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
 import * as fs from "fs";
+import { SpinorAgent } from "../../typechain-types";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
@@ -28,6 +29,22 @@ async function main() {
     await agent.deployed();
     console.log("SpinorAgent deployed to:", agent.address);
 
+    // Pause the contract first if needed
+    const isPaused = await agent.paused();
+    if (!isPaused) {
+        console.log("Pausing the contract...");
+        const pauseTx = await agent.pause();
+        await pauseTx.wait();
+        console.log("Contract paused successfully");
+    }
+
+
+    // Unpause the contract if needed
+    console.log("Unpausing the contract...");
+    const unpauseTx = await agent.unpause();
+    await unpauseTx.wait();
+    console.log("Contract unpaused successfully");
+
     // Update deployment info
     deploymentInfo.agent = agent.address;
     
@@ -42,23 +59,10 @@ async function main() {
     // Initialize the agent
     console.log("\nInitializing SpinorAgent...");
     
-    // Pause the contract first
-    console.log("Pausing the agent...");
-    await agent.pause();
-    console.log("Agent paused");
-
-    // Set initial duration (24 hours)
-    console.log("Setting duration...");
-    const ONE_DAY = 24 * 60 * 60; // 24 hours in seconds
-    await agent.setDuration(ONE_DAY);
-    console.log("Duration set to 24 hours");
-
     // Verify the configuration
     const duration = await agent.duration();
-    const isPaused = await agent.paused();
     console.log("\nVerifying configuration:");
     console.log("- Duration:", duration.toString(), "seconds");
-    console.log("- Paused:", isPaused);
 
     console.log("\nDeployment completed successfully!");
     console.log("You can now:");

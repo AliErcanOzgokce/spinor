@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@reown/appkit": "^1.6.8"
+  }
+}

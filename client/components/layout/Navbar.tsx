@@ -5,40 +5,6 @@ import Image from 'next/image'
 import { useTheme } from '@/context/ThemeContext'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 
-// SVG Logo component with minimal design
-const SpinorLogo = () => (
-  <motion.svg
-    width="40"
-    height="40"
-    viewBox="0 0 40 40"
-    initial={{ opacity: 0, scale: 0.5 }}
-    animate={{ opacity: 1, scale: 1 }}
-    transition={{ duration: 0.5 }}
-    className="text-black dark:text-white"
-  >
-    <motion.circle
-      cx="20"
-      cy="20"
-      r="18"
-      stroke="currentColor"
-      strokeWidth="2"
-      fill="none"
-      initial={{ pathLength: 0 }}
-      animate={{ pathLength: 1 }}
-      transition={{ duration: 1, ease: "easeInOut" }}
-    />
-    <motion.path
-      d="M15 20L25 20M20 15L20 25"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      initial={{ pathLength: 0 }}
-      animate={{ pathLength: 1 }}
-      transition={{ duration: 0.5, delay: 0.5 }}
-    />
-  </motion.svg>
-)
-
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false)
   const { theme, toggleTheme } = useTheme()
@@ -104,15 +70,9 @@ const Navbar = () => {
             )}
           </motion.button>
 
-          {/* Connect Wallet Button */}
-          <motion.button
-            className="bg-black dark:bg-white text-white dark:text-black px-6 py-2 rounded-full text-sm font-medium
-                     hover:bg-black/90 dark:hover:bg-white/90 transition-colors duration-200"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Connect Wallet
-          </motion.button>
+          {/* AppKit Web Component */}
+          {/* @ts-expect-error Web Component */}
+          <appkit-button />
         </div>
       </div>
     </motion.nav>

@@ -18,7 +18,7 @@ async function main() {
 
   // Load deployment info
   const deploymentInfo: DeploymentInfo = JSON.parse(
-    fs.readFileSync("deployment.json", "utf-8")
+    fs.readFileSync("deployments.json", "utf-8")
   );
 
   // Get contract instances
