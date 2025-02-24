@@ -1,101 +1,338 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowsUpDownIcon, ChevronDownIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { ArrowsUpDownIcon, ChevronDownIcon, PlusIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
+import { SwapService } from '@/services/swap/SwapService'
+import { Token, SwapState } from '@/services/swap/types'
+import { USDC, DEFAULT_SLIPPAGE, CONTRACT_ADDRESSES } from '@/services/swap/constants'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
+import { TokenSelector } from '@/components/TokenSelector'
+import { SwapProgressModal } from '@/components/swap/SwapProgressModal'
 
-// Token Selection Modal Component
-const TokenModal = ({ isOpen, onClose, onSelect }: any) => (
-  <AnimatePresence>
-    {isOpen && (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-3xl p-6 w-full max-w-md shadow-xl"
-          onClick={e => e.stopPropagation()}
-        >
-          <h3 className="text-xl font-semibold mb-4">Select Token</h3>
-          <input
-            type="text"
-            placeholder="Search by name or paste address"
-            className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-          />
-          <div className="mt-4 space-y-2">
-            {['ETH', 'USDC', 'LST', 'LRT'].map(token => (
-              <motion.button
-                key={token}
-                className="w-full flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => {
-                  onSelect(token)
-                  onClose()
-                }}
-              >
-                <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-primary-700 dark:text-primary-300">{token.slice(0, 1)}</span>
-                </div>
-                <span className="ml-3 font-medium">{token}</span>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
+// Initialize SwapService
+const swapService = new SwapService(
+  CONTRACT_ADDRESSES.ROUTER,
+  CONTRACT_ADDRESSES.FACTORY
 )
+
+// Slippage Settings Modal Component
+const SlippageModal = ({
+  isOpen,
+  onClose,
+  slippage,
+  onSlippageChange
+}: {
+  isOpen: boolean
+  onClose: () => void
+  slippage: number
+  onSlippageChange: (value: number) => void
+}) => {
+  const [customSlippage, setCustomSlippage] = useState('')
+
+  const presetSlippages = [0.1, 0.5, 1.0]
+
+  const handleCustomSlippageChange = (value: string) => {
+    setCustomSlippage(value)
+    const numValue = Number(value)
+    if (!isNaN(numValue) && numValue > 0 && numValue <= 5) {
+      onSlippageChange(numValue)
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="bg-white dark:bg-gray-800 rounded-3xl p-6 w-full max-w-md shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Slippage Tolerance</h3>
+            
+            <div className="flex gap-2 mb-4">
+              {presetSlippages.map((value) => (
+                <button
+                  key={value}
+                  onClick={() => onSlippageChange(value)}
+                  className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-colors ${
+                    slippage === value
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {value}%
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <input
+                type="number"
+                value={customSlippage}
+                onChange={(e) => handleCustomSlippageChange(e.target.value)}
+                placeholder="Custom slippage"
+                className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-900 dark:text-white 
+                         placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 
+                         focus:ring-primary-500/20"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">%</span>
+            </div>
+
+            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+              Your transaction will revert if the price changes unfavorably by more than this percentage.
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 // Token Input Component
-const TokenInput = ({ value, onChange, token, onTokenSelect, label }: any) => (
-  <div className="bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg p-4 rounded-2xl border border-gray-100/20 dark:border-white/[0.08]">
-    <div className="flex justify-between mb-2">
-      <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
-      <span className="text-sm text-gray-500 dark:text-gray-400">Balance: 0.00</span>
-    </div>
-    <div className="flex items-center gap-3">
-      <input
-        type="number"
-        value={value}
-        onChange={onChange}
-        placeholder="0.00"
-        className="w-[calc(100%-140px)] bg-transparent text-2xl font-medium text-gray-900 dark:text-white focus:outline-none"
-      />
-      <motion.button
-        className="flex items-center gap-2 bg-gray-50 dark:bg-white/[0.06] px-4 py-2 rounded-xl border border-gray-100/20 
-                 dark:border-white/[0.08] w-[140px] hover:bg-gray-100/50 dark:hover:bg-white/[0.08] transition-colors duration-200"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onTokenSelect}
-      >
-        <div className="w-6 h-6 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center shrink-0">
-          <span className="text-xs font-medium text-primary-700 dark:text-primary-300">{token.slice(0, 1)}</span>
+const TokenInput = ({ 
+  value, 
+  onChange, 
+  token, 
+  onTokenSelect, 
+  label,
+  disabled = false,
+  showPrice = false,
+  price = ''
+}: { 
+  value: string
+  onChange: (value: string) => void
+  token: Token | null
+  onTokenSelect: () => void
+  label: string
+  disabled?: boolean
+  showPrice?: boolean
+  price?: string
+}) => {
+  const { address } = useAccount()
+  const [balance, setBalance] = useState('0')
+
+  useEffect(() => {
+    const getBalance = async () => {
+      if (token && address && swapService) {
+        const balance = await swapService.getTokenBalance(token, address)
+        setBalance(balance)
+      }
+    }
+    getBalance()
+  }, [token, address])
+
+  return (
+    <div className="bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg p-4 rounded-2xl border border-gray-100/20 dark:border-white/[0.08]">
+      <div className="flex justify-between mb-2">
+        <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500 dark:text-gray-400">Balance:</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-white">
+            {Number(balance)}
+          </span>
+          {token && balance !== '0' && (
+            <button
+              onClick={() => onChange(balance)}
+              className="text-xs text-primary-500 dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300"
+            >
+              MAX
+            </button>
+          )}
         </div>
-        <span className="font-medium text-gray-900 dark:text-white min-w-[50px]">{token}</span>
-        <ChevronDownIcon className="w-4 h-4 text-gray-400 dark:text-gray-500 ml-auto" />
-      </motion.button>
+      </div>
+      <div className="flex items-center gap-3">
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="0.00"
+          disabled={disabled}
+          className="w-[calc(100%-140px)] bg-transparent text-2xl font-medium text-gray-900 dark:text-white focus:outline-none"
+        />
+        <motion.button
+          className="flex items-center gap-2 bg-gray-50 dark:bg-white/[0.06] px-4 py-2 rounded-xl border border-gray-100/20 
+                   dark:border-white/[0.08] w-[140px] hover:bg-gray-100/50 dark:hover:bg-white/[0.08] transition-colors duration-200"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onTokenSelect}
+        >
+          {token ? (
+            <>
+              <div className="w-6 h-6 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center shrink-0">
+                <span className="text-xs font-medium text-primary-700 dark:text-primary-300">{token.symbol[0]}</span>
+              </div>
+              <span className="font-medium text-gray-900 dark:text-white min-w-[50px]">{token.symbol}</span>
+            </>
+          ) : (
+            <span className="font-medium text-gray-500 dark:text-gray-400">Select Token</span>
+          )}
+          <ChevronDownIcon className="w-4 h-4 text-gray-400 dark:text-gray-500 ml-auto" />
+        </motion.button>
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 export default function SwapPage() {
-  const [tokenFrom, setTokenFrom] = useState('ETH')
-  const [tokenTo, setTokenTo] = useState('USDC')
-  const [amount, setAmount] = useState('')
-  const [showFromModal, setShowFromModal] = useState(false)
-  const [showToModal, setShowToModal] = useState(false)
+  const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
+  const [availableTokens, setAvailableTokens] = useState<Token[]>([USDC])
+  const [state, setState] = useState<SwapState>({
+    tokenIn: USDC,
+    tokenOut: null,
+    amountIn: '',
+    amountOut: '',
+    loading: false,
+    error: null,
+    priceImpact: 0
+  })
+
+  const [showSlippageModal, setShowSlippageModal] = useState(false)
+  const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE * 100) // Convert to percentage
+
+  // Update token selection modal state
+  const [tokenSelectorConfig, setTokenSelectorConfig] = useState<{
+    isOpen: boolean
+    type: 'from' | 'to'
+  }>({
+    isOpen: false,
+    type: 'from'
+  })
+
+  // New states for swap progress
+  const [swapStatus, setSwapStatus] = useState<'approving' | 'swapping' | 'success' | 'error'>('approving')
+  const [showProgressModal, setShowProgressModal] = useState(false)
+  const [swapError, setSwapError] = useState<string>()
+  const [txHash, setTxHash] = useState<string>()
+
+  useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        const tokens = await swapService.getAvailableTokens()
+        setAvailableTokens([USDC, ...tokens])
+      } catch (error) {
+        console.error('Error fetching tokens:', error)
+      }
+    }
+    fetchTokens()
+  }, [])
 
   const handleSwapTokens = () => {
-    setTokenFrom(tokenTo)
-    setTokenTo(tokenFrom)
+    setState(prev => ({
+      ...prev,
+      tokenIn: prev.tokenOut,
+      tokenOut: prev.tokenIn,
+      amountIn: '',
+      amountOut: ''
+    }))
+  }
+
+  const handleAmountInChange = async (value: string) => {
+    setState(prev => ({ ...prev, amountIn: value, loading: true, error: null }))
+    
+    if (!state.tokenIn || !state.tokenOut || !value || value === '0') {
+      setState(prev => ({ ...prev, amountOut: '', loading: false }))
+      return
+    }
+
+    try {
+      const quote = await swapService.getQuote(
+        state.tokenIn,
+        state.tokenOut,
+        value,
+        'exactIn'
+      )
+      
+      setState(prev => ({
+        ...prev,
+        amountOut: quote.amountOut,
+        priceImpact: quote.priceImpact,
+        loading: false
+      }))
+    } catch (error) {
+      console.error('Error getting quote:', error)
+      setState(prev => ({
+        ...prev,
+        amountOut: '',
+        error: error instanceof Error ? error.message : 'Failed to get quote',
+        loading: false
+      }))
+    }
+  }
+
+  const handleSwap = async () => {
+    if (!state.tokenIn || !state.tokenOut || !state.amountIn || !address || !walletClient) {
+      setState(prev => ({ ...prev, error: 'Please connect your wallet and select tokens' }))
+      return
+    }
+
+    try {
+      setShowProgressModal(true)
+      setSwapStatus('approving')
+      setState(prev => ({ ...prev, loading: true, error: null }))
+
+      try {
+        const hash = await swapService.executeSwap(
+          state.tokenIn,
+          state.tokenOut,
+          state.amountIn,
+          slippage,
+          address,
+          walletClient
+        )
+
+        // Set transaction hash and show success immediately
+        setTxHash(hash)
+        setSwapStatus('success')
+        
+        // Reset form
+        setState(prev => ({ 
+          ...prev, 
+          amountIn: '', 
+          amountOut: '',
+          loading: false,
+          error: null
+        }))
+
+      } catch (error: any) {
+        console.error('Swap error:', error)
+        setSwapStatus('error')
+        setSwapError(error.message || 'Failed to execute swap. Please try again.')
+        setState(prev => ({ ...prev, loading: false, error: error.message }))
+      }
+    } finally {
+      setState(prev => ({ ...prev, loading: false }))
+    }
+  }
+
+  // Update token selection handlers
+  const openTokenSelector = (type: 'from' | 'to') => {
+    setTokenSelectorConfig({ isOpen: true, type })
+  }
+
+  const closeTokenSelector = () => {
+    setTokenSelectorConfig(prev => ({ ...prev, isOpen: false }))
+  }
+
+  const handleTokenSelect = (token: Token) => {
+    if (tokenSelectorConfig.type === 'from') {
+      setState(prev => ({ ...prev, tokenIn: token, amountOut: '' }))
+    } else {
+      setState(prev => ({ ...prev, tokenOut: token, amountOut: '' }))
+    }
+    closeTokenSelector()
   }
 
   return (
@@ -119,18 +356,20 @@ export default function SwapPage() {
                 className="p-2 hover:bg-gray-100 dark:hover:bg-white/[0.06] rounded-xl transition-colors"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onClick={() => setShowSlippageModal(true)}
               >
-                <PlusIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                <AdjustmentsHorizontalIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </motion.button>
             </div>
 
             <div className="space-y-2">
               <TokenInput
-                value={amount}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
-                token={tokenFrom}
-                onTokenSelect={() => setShowFromModal(true)}
+                value={state.amountIn}
+                onChange={handleAmountInChange}
+                token={state.tokenIn}
+                onTokenSelect={() => openTokenSelector('from')}
                 label="You pay"
+                showPrice={false}
               />
 
               <div className="flex justify-center -my-2 relative z-10">
@@ -145,50 +384,97 @@ export default function SwapPage() {
               </div>
 
               <TokenInput
-                value={'0.00'}
+                value={state.amountOut}
                 onChange={() => {}}
-                token={tokenTo}
-                onTokenSelect={() => setShowToModal(true)}
+                token={state.tokenOut}
+                onTokenSelect={() => openTokenSelector('to')}
                 label="You receive"
+                disabled
+                showPrice={false}
               />
             </div>
+
+            {state.error && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-600 dark:text-red-400">
+                {state.error}
+              </div>
+            )}
 
             <div className="mt-6 p-4 bg-gray-50/80 dark:bg-white/[0.03] backdrop-blur-sm rounded-xl space-y-2 
                          border border-gray-100/20 dark:border-white/[0.08]">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Price Impact</span>
-                <span className="font-medium text-green-500 dark:text-green-400">{'< 0.01%'}</span>
+                <span className={`font-medium ${
+                  state.priceImpact > 1 ? 'text-red-500 dark:text-red-400' :
+                  state.priceImpact > 0.5 ? 'text-yellow-500 dark:text-yellow-400' :
+                  'text-green-500 dark:text-green-400'
+                }`}>
+                  {state.priceImpact.toFixed(2)}%
+                </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Route</span>
-                <span className="font-medium text-gray-700 dark:text-gray-200">{`${tokenFrom} → ${tokenTo}`}</span>
+                <span className="text-gray-500 dark:text-gray-400">Slippage Tolerance</span>
+                <span className="font-medium text-gray-700 dark:text-gray-200">
+                  {slippage}%
+                </span>
               </div>
+              {state.tokenIn && state.tokenOut && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Route</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">
+                    {state.tokenIn.symbol} → {state.tokenOut.symbol}
+                  </span>
+                </div>
+              )}
             </div>
 
             <motion.button
               className="w-full mt-6 bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600 
                        text-white py-4 rounded-xl font-medium shadow-[0_0_30px_rgba(107,112,244,0.2)] 
                        dark:shadow-[0_0_30px_rgba(107,112,244,0.1)] hover:shadow-[0_0_30px_rgba(107,112,244,0.4)] 
-                       dark:hover:shadow-[0_0_30px_rgba(107,112,244,0.2)] transition-all duration-200"
+                       dark:hover:shadow-[0_0_30px_rgba(107,112,244,0.2)] transition-all duration-200 disabled:opacity-50
+                       disabled:cursor-not-allowed"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={handleSwap}
+              disabled={!state.tokenIn || !state.tokenOut || !state.amountIn || state.loading}
             >
-              Swap
+              {state.loading ? 'Loading...' : 'Swap'}
             </motion.button>
           </motion.div>
         </div>
 
-        <TokenModal
-          isOpen={showFromModal}
-          onClose={() => setShowFromModal(false)}
-          onSelect={setTokenFrom}
+        <TokenSelector
+          isOpen={tokenSelectorConfig.isOpen}
+          onClose={closeTokenSelector}
+          onSelect={handleTokenSelect}
+          selectedTokens={[state.tokenIn, state.tokenOut]}
+          type={tokenSelectorConfig.type}
         />
-        <TokenModal
-          isOpen={showToModal}
-          onClose={() => setShowToModal(false)}
-          onSelect={setTokenTo}
+        <SlippageModal
+          isOpen={showSlippageModal}
+          onClose={() => setShowSlippageModal(false)}
+          slippage={slippage}
+          onSlippageChange={setSlippage}
         />
       </div>
+
+      <SwapProgressModal
+        isOpen={showProgressModal}
+        onClose={() => {
+          setShowProgressModal(false)
+          setSwapStatus('approving')
+          setTxHash(undefined)
+          setSwapError(undefined)
+        }}
+        status={swapStatus}
+        tokenIn={state.tokenIn}
+        tokenOut={state.tokenOut}
+        amountIn={state.amountIn}
+        amountOut={state.amountOut}
+        error={swapError}
+        txHash={txHash}
+      />
     </>
   )
 } 

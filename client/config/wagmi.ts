@@ -3,7 +3,7 @@ import { createAppKit } from '@reown/appkit/react'
 import { type Chain } from 'viem'
 
 // Define ABC Testnet
-const abcTestnet = {
+export const abcTestnet = {
   id: 112,
   name: 'ABC Testnet',
   nativeCurrency: {
@@ -25,7 +25,7 @@ const abcTestnet = {
     default: { name: 'ABC Explorer', url: 'https://explorer.abc.t.raas.gelato.cloud' },
   },
   testnet: true,
-} as const
+} as const satisfies Chain
 
 // Get projectId from https://cloud.reown.com
 export const projectId = '7b572b9e0a17ea9706a43092d0a57b89'
@@ -36,7 +36,7 @@ if (!projectId) {
 
 // Create Wagmi Adapter with type assertion
 export const wagmiAdapter = new WagmiAdapter({
-  networks: [abcTestnet as unknown as Chain],
+  networks: [abcTestnet],
   projectId,
   ssr: true
 })
@@ -52,9 +52,9 @@ const metadata = {
 // Create modal with ABC Testnet as default network
 export const modal = createAppKit({
   adapters: [wagmiAdapter],
-  networks: [abcTestnet as unknown as Chain],
+  networks: [abcTestnet],
   projectId,
-  defaultNetwork: abcTestnet as unknown as Chain,
+  defaultNetwork: abcTestnet,
   metadata,
   features: {
     analytics: true

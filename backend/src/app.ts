@@ -18,21 +18,21 @@ const ADMIN_PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY;
 if (!ADMIN_PRIVATE_KEY) {
     console.error('Warning: ADMIN_PRIVATE_KEY not found in environment variables. Automated swaps will not be available.');
 } else {
-    const swapService = new SwapService(ADMIN_PRIVATE_KEY);
-    swapService.start().catch(error => {
-        console.error('Error starting swap service:', error);
-    });
+    // const swapService = new SwapService(ADMIN_PRIVATE_KEY);
+    // swapService.start().catch(error => {
+    //     console.error('Error starting swap service:', error);
+    // });
 
-    // Handle graceful shutdown
-    process.on('SIGINT', () => {
-        console.log('Received SIGINT. Gracefully shutting down swap service...');
-        swapService.stop();
-    });
+    // // Handle graceful shutdown
+    // process.on('SIGINT', () => {
+    //     console.log('Received SIGINT. Gracefully shutting down swap service...');
+    //     swapService.stop();
+    // });
 
-    process.on('SIGTERM', () => {
-        console.log('Received SIGTERM. Gracefully shutting down swap service...');
-        swapService.stop();
-    });
+    // process.on('SIGTERM', () => {
+    //     console.log('Received SIGTERM. Gracefully shutting down swap service...');
+    //     swapService.stop();
+    // });
 }
 
 // First, collect all token prices and calculate ranges
@@ -348,10 +348,10 @@ app.get('/api/agent-info', async (req: Request, res: Response) => {
 
         res.json(response);
     } catch (error) {
-        console.error('Error fetching agent info:', error);
+        console.error('Error fetching pool data:', error);
         res.status(500).json({
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to fetch agent information'
+            message: 'Failed to fetch pool data'
         });
     }
 });
