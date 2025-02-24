@@ -175,7 +175,7 @@ const TokenInput = ({
               <span className="font-medium text-gray-900 dark:text-white min-w-[50px]">{token.symbol}</span>
             </>
           ) : (
-            <span className="font-medium text-gray-500 dark:text-gray-400">Select Token</span>
+            <span className="font-medium text-gray-500 dark:text-gray-400">Select</span>
           )}
           <ChevronDownIcon className="w-4 h-4 text-gray-400 dark:text-gray-500 ml-auto" />
         </motion.button>
