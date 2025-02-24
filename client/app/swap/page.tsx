@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowsUpDownIcon, ChevronDownIcon, PlusIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
@@ -108,7 +108,8 @@ const TokenInput = ({
   label,
   disabled = false,
   showPrice = false,
-  price = ''
+  price = '',
+  isLoading = false
 }: { 
   value: string
   onChange: (value: string) => void
@@ -118,6 +119,7 @@ const TokenInput = ({
   disabled?: boolean
   showPrice?: boolean
   price?: string
+  isLoading?: boolean
 }) => {
   const { address } = useAccount()
   const [balance, setBalance] = useState('0')
@@ -152,14 +154,20 @@ const TokenInput = ({
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="0.00"
-          disabled={disabled}
-          className="w-[calc(100%-140px)] bg-transparent text-2xl font-medium text-gray-900 dark:text-white focus:outline-none"
-        />
+        {isLoading ? (
+          <div className="w-[calc(100%-140px)] animate-pulse">
+            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          </div>
+        ) : (
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="0.00"
+            disabled={disabled}
+            className="w-[calc(100%-140px)] bg-transparent text-2xl font-medium text-gray-900 dark:text-white focus:outline-none"
+          />
+        )}
         <motion.button
           className="flex items-center gap-2 bg-gray-50 dark:bg-white/[0.06] px-4 py-2 rounded-xl border border-gray-100/20 
                    dark:border-white/[0.08] w-[140px] hover:bg-gray-100/50 dark:hover:bg-white/[0.08] transition-colors duration-200"
@@ -217,6 +225,18 @@ export default function SwapPage() {
   const [swapError, setSwapError] = useState<string>()
   const [txHash, setTxHash] = useState<string>()
 
+  // Add this at the top of the component with other state declarations
+  const quoteTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Add cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (quoteTimeoutRef.current) {
+        clearTimeout(quoteTimeoutRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const fetchTokens = async () => {
       try {
@@ -248,26 +268,37 @@ export default function SwapPage() {
     }
 
     try {
-      const quote = await swapService.getQuote(
-        state.tokenIn,
-        state.tokenOut,
-        value,
-        'exactIn'
-      )
+      // Add debounce to avoid rapid state updates
+      clearTimeout(quoteTimeoutRef.current)
       
-      setState(prev => ({
-        ...prev,
-        amountOut: quote.amountOut,
-        priceImpact: quote.priceImpact,
-        loading: false
-      }))
-    } catch (error) {
-      console.error('Error getting quote:', error)
+      quoteTimeoutRef.current = setTimeout(async () => {
+        const quote = await swapService.getQuote(
+          state.tokenIn!,
+          state.tokenOut!,
+          value,
+          'exactIn'
+        )
+        
+        // Only update if the input amount hasn't changed
+        setState(prev => {
+          if (prev.amountIn === value) {
+            return {
+              ...prev,
+              amountOut: quote.amountOut,
+              priceImpact: quote.priceImpact,
+              loading: false,
+              error: null
+            }
+          }
+          return prev
+        })
+      }, 500) // Increased debounce time
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         amountOut: '',
-        error: error instanceof Error ? error.message : 'Failed to get quote',
-        loading: false
+        loading: false,
+        error: error.message
       }))
     }
   }
@@ -279,6 +310,10 @@ export default function SwapPage() {
     }
 
     try {
+      // Store current amounts before resetting state
+      const currentAmountIn = state.amountIn;
+      const currentAmountOut = state.amountOut;
+      
       setShowProgressModal(true)
       setSwapStatus('approving')
       setState(prev => ({ ...prev, loading: true, error: null }))
@@ -287,17 +322,17 @@ export default function SwapPage() {
         const hash = await swapService.executeSwap(
           state.tokenIn,
           state.tokenOut,
-          state.amountIn,
+          currentAmountIn,
           slippage,
           address,
           walletClient
         )
 
-        // Set transaction hash and show success immediately
+        // Set transaction hash and show success
         setTxHash(hash)
         setSwapStatus('success')
         
-        // Reset form
+        // Reset form but keep the successful amounts in the modal
         setState(prev => ({ 
           ...prev, 
           amountIn: '', 
@@ -305,6 +340,12 @@ export default function SwapPage() {
           loading: false,
           error: null
         }))
+
+        // Update modal amounts
+        setModalState({
+          amountIn: currentAmountIn,
+          amountOut: currentAmountOut
+        })
 
       } catch (error: any) {
         console.error('Swap error:', error)
@@ -316,6 +357,12 @@ export default function SwapPage() {
       setState(prev => ({ ...prev, loading: false }))
     }
   }
+
+  // Add this near other state declarations
+  const [modalState, setModalState] = useState({
+    amountIn: '',
+    amountOut: ''
+  });
 
   // Update token selection handlers
   const openTokenSelector = (type: 'from' | 'to') => {
@@ -391,6 +438,7 @@ export default function SwapPage() {
                 label="You receive"
                 disabled
                 showPrice={false}
+                isLoading={state.loading}
               />
             </div>
 
@@ -466,12 +514,13 @@ export default function SwapPage() {
           setSwapStatus('approving')
           setTxHash(undefined)
           setSwapError(undefined)
+          setModalState({ amountIn: '', amountOut: '' })
         }}
         status={swapStatus}
         tokenIn={state.tokenIn}
         tokenOut={state.tokenOut}
-        amountIn={state.amountIn}
-        amountOut={state.amountOut}
+        amountIn={modalState.amountIn || state.amountIn}
+        amountOut={modalState.amountOut || state.amountOut}
         error={swapError}
         txHash={txHash}
       />

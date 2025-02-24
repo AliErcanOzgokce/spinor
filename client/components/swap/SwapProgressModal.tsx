@@ -20,6 +20,32 @@ interface SwapProgressModalProps {
   txHash?: string;
 }
 
+// Format amount to show max 6 decimal places
+const formatAmount = (amount: string) => {
+  if (!amount || amount === '0') return '0';
+  
+  const num = parseFloat(amount);
+  if (isNaN(num)) return '0';
+  
+  // If the number is less than 0.000001, show in scientific notation
+  if (num < 0.000001 && num > 0) {
+    return num.toExponential(2);
+  }
+  
+  // For other numbers, show up to 6 decimal places
+  // Remove trailing zeros after decimal point
+  const formatted = num.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6
+  });
+  
+  // If it's a whole number, return as is
+  if (!formatted.includes('.')) return formatted;
+  
+  // Remove trailing zeros after decimal
+  return formatted.replace(/\.?0+$/, '');
+};
+
 // Enhanced Loading Spinner with Gradient Effect
 const LoadingSpinner = () => (
   <div className="relative w-12 h-12 mx-auto">
@@ -50,6 +76,23 @@ const LoadingSpinner = () => (
         ease: "easeInOut",
       }}
     />
+  </div>
+);
+
+// Token Amount Display Component
+const TokenAmountDisplay = ({ amount, symbol, label }: { amount: string; symbol: string; label: string }) => (
+  <div className="flex flex-col items-center">
+    <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+      {label}
+    </span>
+    <div className="flex flex-col items-center bg-black/[0.02] dark:bg-white/[0.02] rounded-xl p-3 min-w-[120px]">
+      <span className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">
+        {formatAmount(amount)}
+      </span>
+      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">
+        {symbol}
+      </span>
+    </div>
   </div>
 );
 
@@ -120,9 +163,6 @@ export const SwapProgressModal = ({
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                       {tokenIn?.symbol} → {tokenOut?.symbol}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {amountIn} → {amountOut}
-                    </p>
                   </div>
                 </div>
               </div>
@@ -136,28 +176,22 @@ export const SwapProgressModal = ({
                     className="text-center w-full"
                   >
                     <LoadingSpinner />
-                    <div className="mt-6 p-4 bg-black/5 dark:bg-white/5 rounded-2xl">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            From
-                          </span>
-                          <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
-                            {amountIn} {tokenIn?.symbol}
-                          </span>
-                        </div>
-                        <ArrowLongRightIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" />
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            To
-                          </span>
-                          <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
-                            {amountOut} {tokenOut?.symbol}
-                          </span>
-                        </div>
+                    <div className="mt-6 p-4 bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5">
+                      <div className="flex items-center justify-between gap-6">
+                        <TokenAmountDisplay 
+                          amount={amountIn} 
+                          symbol={tokenIn?.symbol || ''} 
+                          label="From" 
+                        />
+                        <ArrowLongRightIcon className="w-6 h-6 text-gray-400 dark:text-gray-500 mt-4" />
+                        <TokenAmountDisplay 
+                          amount={amountOut} 
+                          symbol={tokenOut?.symbol || ''} 
+                          label="To" 
+                        />
                       </div>
                     </div>
-                    <h4 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                    <h4 className="mt-6 text-lg font-medium text-gray-900 dark:text-white">
                       Approving {tokenIn?.symbol}
                     </h4>
                     <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
@@ -172,25 +206,19 @@ export const SwapProgressModal = ({
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center w-full"
                   >
-                    <div className="mb-6 p-4 bg-black/5 dark:bg-white/5 rounded-2xl">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            From
-                          </span>
-                          <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
-                            {amountIn} {tokenIn?.symbol}
-                          </span>
-                        </div>
-                        <ArrowLongRightIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" />
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            To
-                          </span>
-                          <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
-                            {amountOut} {tokenOut?.symbol}
-                          </span>
-                        </div>
+                    <div className="mb-6 p-4 bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5">
+                      <div className="flex items-center justify-between gap-6">
+                        <TokenAmountDisplay 
+                          amount={amountIn} 
+                          symbol={tokenIn?.symbol || ''} 
+                          label="From" 
+                        />
+                        <ArrowLongRightIcon className="w-6 h-6 text-gray-400 dark:text-gray-500 mt-4" />
+                        <TokenAmountDisplay 
+                          amount={amountOut} 
+                          symbol={tokenOut?.symbol || ''} 
+                          label="To" 
+                        />
                       </div>
                     </div>
                     <LoadingSpinner />
@@ -228,65 +256,33 @@ export const SwapProgressModal = ({
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 }}
-                      className="mt-6 p-6 bg-black/5 dark:bg-white/5 rounded-2xl mx-auto max-w-sm border border-black/5 dark:border-white/5"
+                      className="mt-6 p-6 bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5"
                     >
                       <div className="flex items-center justify-between gap-6">
-                        {/* From Token */}
-                        <div className="flex flex-col items-center flex-1">
-                          <div
-                            className="w-12 h-12 bg-primary-100 dark:bg-white/[0.08] rounded-full 
-                                        flex items-center justify-center mb-3"
-                          >
-                            <span className="text-lg font-medium text-primary-700 dark:text-primary-300">
-                              {tokenIn?.symbol[0]}
-                            </span>
-                          </div>
-                          <span className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
-                            {amountIn}
-                          </span>
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                            {tokenIn?.symbol}
-                          </span>
-                        </div>
-
-                        {/* Arrow */}
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-primary-50 dark:bg-white/[0.03] flex items-center justify-center">
-                            <ArrowLongRightIcon className="w-6 h-6 text-primary-500 dark:text-primary-400" />
-                          </div>
-                        </div>
-
-                        {/* To Token */}
-                        <div className="flex flex-col items-center flex-1">
-                          <div
-                            className="w-12 h-12 bg-primary-50 dark:bg-white/[0.05] rounded-full 
-                                        flex items-center justify-center mb-3"
-                          >
-                            <span className="text-lg font-medium text-primary-600 dark:text-primary-400">
-                              {tokenOut?.symbol[0]}
-                            </span>
-                          </div>
-                          <span className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
-                            {amountOut}
-                          </span>
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                            {tokenOut?.symbol}
-                          </span>
-                        </div>
+                        <TokenAmountDisplay 
+                          amount={amountIn} 
+                          symbol={tokenIn?.symbol || ''} 
+                          label="From" 
+                        />
+                        <ArrowLongRightIcon className="w-6 h-6 text-gray-400 dark:text-gray-500 mt-4" />
+                        <TokenAmountDisplay 
+                          amount={amountOut} 
+                          symbol={tokenOut?.symbol || ''} 
+                          label="To" 
+                        />
                       </div>
                     </motion.div>
 
                     {txHash && explorerUrl && (
                       <motion.a
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.4 }}
                         href={`${explorerUrl}/tx/${txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-primary-500/10 
-                                 hover:bg-primary-500/20 dark:bg-primary-400/10 dark:hover:bg-primary-400/20 
-                                 rounded-xl text-primary-600 dark:text-primary-400 text-sm font-medium 
-                                 transition-colors duration-200"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        className="mt-6 inline-flex items-center gap-2 text-sm text-primary-500 hover:text-primary-600 
+                                dark:text-primary-400 dark:hover:text-primary-300"
                       >
                         View on Explorer
                         <ArrowTopRightOnSquareIcon className="w-4 h-4" />
@@ -312,13 +308,10 @@ export const SwapProgressModal = ({
                       </div>
                     </motion.div>
                     <h4 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                      Swap Failed
+                      Transaction Failed
                     </h4>
                     {error && (
-                      <p
-                        className="mt-2 text-sm text-red-500 dark:text-red-400 bg-red-500/10 
-                                  dark:bg-red-500/5 rounded-lg px-4 py-2"
-                      >
+                      <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                         {error}
                       </p>
                     )}
