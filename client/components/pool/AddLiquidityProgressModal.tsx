@@ -160,7 +160,7 @@ export const AddLiquidityProgressModal = ({
                             </p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                               {step.status === 'loading'
-                                ? 'In progress...'
+                                ? 'Waiting for confirmation...'
                                 : step.status === 'completed'
                                 ? 'Completed'
                                 : step.status === 'error'

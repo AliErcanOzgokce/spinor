@@ -136,9 +136,9 @@ export default function AddLiquidityPage() {
   }
 
   const [steps, setSteps] = useState<Step[]>([
-    { label: 'Approving Token 0', status: 'pending' },
-    { label: 'Approving Token 1', status: 'pending' },
-    { label: 'Adding Liquidity', status: 'pending' }
+    { label: 'Approve USDC', status: 'pending' },
+    { label: 'Approve Token', status: 'pending' },
+    { label: 'Add Liquidity', status: 'pending' }
   ]);
   const [error, setError] = useState('');
 
@@ -216,11 +216,11 @@ export default function AddLiquidityPage() {
     setError('');
     
     try {
-      // Reset steps
+      // Reset steps with the correct token names
       setSteps([
-        { label: 'Approving USDC', status: 'pending' },
-        { label: `Approving ${token1.symbol}`, status: 'pending' },
-        { label: 'Adding Liquidity', status: 'pending' }
+        { label: `Approve ${token0.symbol}`, status: 'pending' },
+        { label: `Approve ${token1.symbol}`, status: 'pending' },
+        { label: 'Add Liquidity', status: 'pending' }
       ]);
 
       const hash = await poolService.addLiquidity(
@@ -234,15 +234,14 @@ export default function AddLiquidityPage() {
         // Handle Token0 (USDC) Approval
         () => {
           setSteps(prev => prev.map((step, i) => 
-            i === 0 ? { ...step, status: 'loading' as StepStatus } : step
+            i === 0 ? { ...step, status: 'loading' } : step
           ));
         },
         // Handle Token1 Approval
         () => {
-          // Mark Token0 approval as completed and Token1 approval as loading
           setSteps(prev => prev.map((step, i) => {
-            if (i === 0) return { ...step, status: 'completed' as StepStatus };
-            if (i === 1) return { ...step, status: 'loading' as StepStatus };
+            if (i === 0) return { ...step, status: 'completed' };
+            if (i === 1) return { ...step, status: 'loading' };
             return step;
           }));
         }
@@ -252,21 +251,19 @@ export default function AddLiquidityPage() {
       setSteps(prev => prev.map((step, i) => 
         i === 2 ? { ...step, status: 'completed', hash } : { ...step, status: 'completed' }
       ));
+
+      // Reset form
+      setAmount0('');
+      setAmount1('');
+      setToken0(TOKENS.USDC);
+      setToken1(null);
     } catch (err: any) {
       setError(err.message);
       // Find the current loading step and mark it as error
       setSteps(prev => prev.map(step => 
-        step.status === 'loading' ? { ...step, status: 'error' as StepStatus } : step
+        step.status === 'loading' ? { ...step, status: 'error' } : step
       ));
     }
-  };
-
-  const handleSuccess = () => {
-    // Reset form
-    setAmount0('');
-    setAmount1('');
-    setToken0(null);
-    setToken1(null);
   };
 
   const openTokenSelector = (type: 'from' | 'to') => {
@@ -404,7 +401,6 @@ export default function AddLiquidityPage() {
           onClose={() => setModalOpen(false)}
           steps={steps}
           error={error}
-          onSuccess={handleSuccess}
         />
       </div>
     </>

@@ -223,19 +223,13 @@ export class PoolService {
       const amountBMin = (amountBDesired * BigInt(Math.floor((1 - slippage) * 10000))) / BigInt(10000)
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200) // 20 minutes
 
-      // Check and approve Token A (Token 0) first
-      const hasAllowanceA = await this.checkAllowance(tokenA, address, this.routerAddress, amountADesired)
-      if (!hasAllowanceA) {
-        onApproveToken0?.()
-        await this.approveToken(tokenA, amountA, address, walletClient)
-      }
+      // Always approve Token A (USDC)
+      onApproveToken0?.()
+      await this.approveToken(tokenA, amountA, address, walletClient)
 
-      // Then check and approve Token B (Token 1)
-      const hasAllowanceB = await this.checkAllowance(tokenB, address, this.routerAddress, amountBDesired)
-      if (!hasAllowanceB) {
-        onApproveToken1?.()
-        await this.approveToken(tokenB, amountB, address, walletClient)
-      }
+      // Always approve Token B
+      onApproveToken1?.()
+      await this.approveToken(tokenB, amountB, address, walletClient)
 
       // Execute add liquidity
       const hash = await walletClient.writeContract({
