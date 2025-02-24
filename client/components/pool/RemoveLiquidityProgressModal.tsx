@@ -11,7 +11,7 @@ interface Step {
   hash?: string;
 }
 
-interface AddLiquidityProgressModalProps {
+interface RemoveLiquidityProgressModalProps {
   open: boolean;
   onClose: () => void;
   steps: Step[];
@@ -52,13 +52,13 @@ const LoadingSpinner = () => (
   </div>
 );
 
-export const AddLiquidityProgressModal = ({
+export const RemoveLiquidityProgressModal = ({
   open,
   onClose,
   steps,
   error,
   onSuccess,
-}: AddLiquidityProgressModalProps) => {
+}: RemoveLiquidityProgressModalProps) => {
   const isAllCompleted = steps.every(step => step.status === 'completed');
   const hasError = steps.some(step => step.status === 'error');
   const lastCompletedStep = steps.findLast(step => step.status === 'completed');
@@ -97,10 +97,10 @@ export const AddLiquidityProgressModal = ({
                     <CheckCircleIcon className="w-16 h-16 text-green-500 dark:text-green-400" />
                   </div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    Liquidity Added Successfully
+                    Liquidity Removed Successfully
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6">
-                    Your liquidity has been added to the pool
+                    Your tokens have been returned to your wallet
                   </p>
                   {lastCompletedStep?.hash && (
                     <a
@@ -130,7 +130,7 @@ export const AddLiquidityProgressModal = ({
                 // Progress View
                 <>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-                    Adding Liquidity
+                    Removing Liquidity
                   </h3>
 
                   <div className="space-y-4">

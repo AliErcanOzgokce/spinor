@@ -274,7 +274,7 @@ export default function AddLiquidityPage() {
   return (
     <>
       <AnimatedBackground />
-      <div className="relative min-h-screen flex items-center justify-center py-20">
+      <div className="relative min-h-screen flex  py-20">
         <div className="w-full max-w-lg mx-auto px-4">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
