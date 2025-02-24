@@ -118,7 +118,8 @@ export default function AddLiquidityPage() {
   const [amount0, setAmount0] = useState('');
   const [amount1, setAmount1] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [isCalculatingToken0, setIsCalculatingToken0] = useState(false);
+  const [isCalculatingToken1, setIsCalculatingToken1] = useState(false);
   const [tokenSelectorConfig, setTokenSelectorConfig] = useState<{
     isOpen: boolean;
     type: 'from' | 'to';
@@ -141,6 +142,65 @@ export default function AddLiquidityPage() {
   ]);
   const [error, setError] = useState('');
 
+  // Add effect for quote calculation
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const calculateOptimalAmount = async () => {
+      if (!token0 || !token1) return;
+
+      // Calculate quote when amount0 changes
+      if (amount0 && !isCalculatingToken1) {
+        setIsCalculatingToken1(true);
+        try {
+          const quote = await poolService.calculateOptimalAmountOut(token0, token1, amount0);
+          if (quote) {
+            setAmount1(quote);
+          }
+        } catch (error) {
+          console.error('Error calculating quote:', error);
+        } finally {
+          setIsCalculatingToken1(false);
+        }
+      }
+      // Calculate quote when amount1 changes
+      else if (amount1 && !isCalculatingToken0) {
+        setIsCalculatingToken0(true);
+        try {
+          const quote = await poolService.calculateOptimalAmountOut(token1, token0, amount1);
+          if (quote) {
+            setAmount0(quote);
+          }
+        } catch (error) {
+          console.error('Error calculating quote:', error);
+        } finally {
+          setIsCalculatingToken0(false);
+        }
+      }
+    };
+
+    // Add debounce to avoid too many calculations
+    timeoutId = setTimeout(calculateOptimalAmount, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [token0, token1, amount0, amount1]);
+
+  const handleAmount0Change = (value: string) => {
+    setAmount0(value);
+    if (!value) {
+      setAmount1('');
+    }
+  };
+
+  const handleAmount1Change = (value: string) => {
+    setAmount1(value);
+    if (!value) {
+      setAmount0('');
+    }
+  };
+
   const handleAddLiquidity = async () => {
     if (!walletClient || !address) {
       setError('Please connect your wallet first');
@@ -158,8 +218,8 @@ export default function AddLiquidityPage() {
     try {
       // Reset steps
       setSteps([
-        { label: 'Approving Token 0', status: 'pending' },
-        { label: 'Approving Token 1', status: 'pending' },
+        { label: 'Approving USDC', status: 'pending' },
+        { label: `Approving ${token1.symbol}`, status: 'pending' },
         { label: 'Adding Liquidity', status: 'pending' }
       ]);
 
@@ -171,7 +231,7 @@ export default function AddLiquidityPage() {
         0.5, // 0.5% slippage
         address,
         walletClient,
-        // Handle Token0 Approval
+        // Handle Token0 (USDC) Approval
         () => {
           setSteps(prev => prev.map((step, i) => 
             i === 0 ? { ...step, status: 'loading' as StepStatus } : step
@@ -179,9 +239,12 @@ export default function AddLiquidityPage() {
         },
         // Handle Token1 Approval
         () => {
-          setSteps(prev => prev.map((step, i) => 
-            i === 1 ? { ...step, status: 'loading' as StepStatus } : step
-          ));
+          // Mark Token0 approval as completed and Token1 approval as loading
+          setSteps(prev => prev.map((step, i) => {
+            if (i === 0) return { ...step, status: 'completed' as StepStatus };
+            if (i === 1) return { ...step, status: 'loading' as StepStatus };
+            return step;
+          }));
         }
       );
 
@@ -215,18 +278,17 @@ export default function AddLiquidityPage() {
   };
 
   const handleTokenSelect = (token: Token) => {
-    // Always ensure USDC is token0 and other token is token1
     if (token.address === TOKENS.USDC.address) {
       setToken0(token);
       // If we already have a non-USDC token1, keep it
       if (token1 && token1.address !== TOKENS.USDC.address) {
         setToken1(token1);
-      } else {
-        setToken1(null);
       }
     } else {
       // If selecting non-USDC token, it should always go to token1
-      setToken0(TOKENS.USDC);
+      if (!token0) {
+        setToken0(TOKENS.USDC);
+      }
       setToken1(token);
     }
     setAmount0('');
@@ -268,13 +330,10 @@ export default function AddLiquidityPage() {
     loadTokensFromPair();
   }, [searchParams]);
 
-  // Disable token0 selection if we have a non-USDC token1
-  const isToken0Disabled = Boolean(token1 && token1.address !== TOKENS.USDC.address);
-
   return (
     <>
       <AnimatedBackground />
-      <div className="relative min-h-screen flex  py-20">
+      <div className="relative min-h-screen flex py-20">
         <div className="w-full max-w-lg mx-auto px-4">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -290,10 +349,10 @@ export default function AddLiquidityPage() {
               <TokenInput
                 label="Token 0"
                 value={amount0}
-                onChange={setAmount0}
+                onChange={handleAmount0Change}
                 token={token0}
                 onTokenSelect={() => openTokenSelector('from')}
-                disabled={isToken0Disabled}
+                isLoading={isCalculatingToken0}
               />
 
               <div className="flex justify-center -my-2">
@@ -305,11 +364,10 @@ export default function AddLiquidityPage() {
               <TokenInput
                 label="Token 1"
                 value={amount1}
-                onChange={setAmount1}
+                onChange={handleAmount1Change}
                 token={token1}
                 onTokenSelect={() => openTokenSelector('to')}
-                disabled={isCalculating}
-                isLoading={isCalculating}
+                isLoading={isCalculatingToken1}
               />
 
               {error && (
@@ -325,7 +383,7 @@ export default function AddLiquidityPage() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleAddLiquidity}
-                disabled={!token0 || !token1 || !amount0 || !amount1 || isCalculating}
+                disabled={!token0 || !token1 || !amount0 || !amount1 || isCalculatingToken0 || isCalculatingToken1}
               >
                 Add Liquidity
               </motion.button>
