@@ -185,8 +185,8 @@ export class AgentService {
           const finalAmountToken = optimalTokenAmount * BigInt(500) / BigInt(100);  // 400% extra buffer
           
           // Set minimum amounts with 10% slippage (90% of actual amounts)
-          const minAmountToken = finalAmountToken * BigInt(10) / BigInt(100);
-          const minAmountUsdc = scaledAmountUsdc * BigInt(10) / BigInt(100);
+          const minAmountToken = finalAmountToken * BigInt(10) / BigInt(100);  // 90% of token amount (10% slippage)
+          const minAmountUsdc = scaledAmountUsdc * BigInt(10) / BigInt(100);   // 90% of USDC amount (10% slippage)
 
           console.log('Final amounts:', {
             scaledAmountToken: finalAmountToken.toString(),

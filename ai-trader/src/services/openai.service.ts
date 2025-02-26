@@ -161,8 +161,8 @@ Respond with a strict JSON format containing:
           const currentTokenAmount = BigInt(Math.floor(tokenAmount * 1e18));
 
           // If we have no LP tokens yet, split USDC between swap and liquidity
-          // For strategy 4, always try to add liquidity regardless of LP token amount
-          if (lpAmount === 0 || strategy === 4) {
+          // For strategy 2 and 4, always try to add liquidity regardless of LP token amount
+          if (lpAmount === 0 || strategy === 2 || strategy === 4) {
             // Use 50% of USDC for swap and 50% for liquidity
             const usdcForSwap = totalUsdcToUse / BigInt(2);
             const usdcForLiquidity = totalUsdcToUse - usdcForSwap;
