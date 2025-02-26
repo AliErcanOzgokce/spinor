@@ -15,6 +15,8 @@ export class AgentService {
   private readonly relay: GelatoRelay;
   private readonly sponsorKey: string;
   private readonly usdcAddress: string = '0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b'; // USDC address from deployments.json
+  private readonly router: ethers.Contract;
+  private readonly factory: ethers.Contract;
 
   constructor(
     openaiApiKey: string,
@@ -22,7 +24,11 @@ export class AgentService {
     provider: ethers.Provider,
     agentAddress: string,
     agentAbi: ethers.InterfaceAbi,
-    historyService: HistoryService
+    historyService: HistoryService,
+    routerAddress: string,
+    routerAbi: ethers.InterfaceAbi,
+    factoryAddress: string,
+    factoryAbi: ethers.InterfaceAbi
   ) {
     this.provider = provider;
     this.sponsorKey = sponsorKey;
@@ -31,6 +37,8 @@ export class AgentService {
     this.relay = new GelatoRelay();
     this.pool = new PoolService('http://localhost:3000');
     this.openai = new OpenAIService(openaiApiKey, this.usdcAddress);
+    this.router = new ethers.Contract(routerAddress, routerAbi, provider);
+    this.factory = new ethers.Contract(factoryAddress, factoryAbi, provider);
   }
 
   async startTrading(): Promise<void> {
@@ -123,16 +131,85 @@ export class AgentService {
     try {
       let functionData: string;
 
-      // Get network information
-      const network = await this.provider.getNetwork();
-      if (network.chainId !== BigInt(112)) {
-        throw new Error(`Invalid network. Expected ABC Testnet (Chain ID: 112), got Chain ID: ${network.chainId}`);
-      }
-
-      // Add delay to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       switch (action.type) {
+        case 'addLiquidity':
+          if (!action.tokenA || !action.tokenB) {
+            throw new Error('Token addresses required for addLiquidity');
+          }
+
+          // Determine token and USDC addresses precisely
+          const isTokenA = action.tokenA.toLowerCase() !== this.usdcAddress.toLowerCase();
+          const tokenAddress = isTokenA ? action.tokenA : action.tokenB;
+          const usdcAddress = isTokenA ? action.tokenB : action.tokenA;
+
+          // Get token decimals
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function decimals() view returns (uint8)'],
+            this.provider
+          );
+          const tokenDecimals = await tokenContract.decimals();
+          console.log(`Token decimals: ${tokenDecimals}`);
+
+          // Get pair and reserves
+          const pairAddress = await this.factory.getPair(tokenAddress, this.usdcAddress);
+          if (!pairAddress || pairAddress === '0x0000000000000000000000000000000000000000') {
+            throw new Error('Pair does not exist');
+          }
+          
+          const [reserveA, reserveB] = await this.getPairReserves(pairAddress);
+          const token0 = await this.getToken0(pairAddress);
+          const isTokenToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+          
+          // Get reserves in correct order (token, USDC)
+          const reserveToken = isTokenToken0 ? reserveA : reserveB;
+          const reserveUsdc = isTokenToken0 ? reserveB : reserveA;
+          
+          console.log('Executing strategy:', action.type);
+          console.log('Initial state:', {
+            tokenAddress,
+            usdcAddress: this.usdcAddress,
+            isTokenToken0,
+            reserveToken: reserveToken.toString(),
+            reserveUsdc: reserveUsdc.toString(),
+            amountToken: action.amountA,
+            amountUsdc: action.amountB,
+            optimalRatio: (reserveToken * BigInt(1000000) / reserveUsdc).toString()
+          });
+
+          // Use only a small percentage of the pool size for liquidity (0.001%)
+          const scaledAmountUsdc = reserveUsdc / BigInt(100000);
+          
+          // Calculate token amount based on current pool ratio, with a 400% buffer for safety
+          const optimalTokenAmount = (scaledAmountUsdc * reserveToken) / reserveUsdc;
+          const finalAmountToken = optimalTokenAmount * BigInt(500) / BigInt(100);  // 400% extra buffer
+          
+          // Set minimum amounts with 10% slippage (90% of actual amounts)
+          const minAmountToken = finalAmountToken * BigInt(10) / BigInt(100);
+          const minAmountUsdc = scaledAmountUsdc * BigInt(10) / BigInt(100);
+
+          console.log('Final amounts:', {
+            scaledAmountToken: finalAmountToken.toString(),
+            scaledAmountUsdc: scaledAmountUsdc.toString(),
+            minAmountToken: minAmountToken.toString(),
+            minAmountUsdc: minAmountUsdc.toString(),
+            extraBuffer: '400%',
+            slippage: '10%'
+          });
+
+          // Prepare function data with token address first
+          functionData = this.agentContract.interface.encodeFunctionData(
+            'addLiquidity',
+            [
+              tokenAddress,  // Always use the actual token address (not USDC)
+              finalAmountToken.toString(),
+              scaledAmountUsdc.toString(),
+              minAmountToken.toString(),
+              minAmountUsdc.toString()
+            ]
+          );
+          break;
+
         case 'swap':
           if (!action.tokenA || !action.tokenB) {
             throw new Error('Missing token addresses for swap');
@@ -146,25 +223,6 @@ export class AgentService {
               action.amountA,           // amountIn
               action.amountB || '0',    // minAmountOut
               isUsdcIn                  // isUsdcIn
-            ]
-          );
-          break;
-
-        case 'addLiquidity':
-          if (!action.tokenA || !action.tokenB) {
-            throw new Error('Missing token addresses for liquidity');
-          }
-          const tokenForLiquidity = action.tokenA.toLowerCase() === this.usdcAddress.toLowerCase() 
-            ? action.tokenB 
-            : action.tokenA;
-          functionData = this.agentContract.interface.encodeFunctionData(
-            'addLiquidity',
-            [
-              tokenForLiquidity,        // token address
-              action.amountA,           // tokenAmount
-              action.amountB,           // usdcAmount
-              action.amountA,           // minTokenAmount
-              action.amountB            // minUsdcAmount
             ]
           );
           break;
@@ -225,6 +283,32 @@ export class AgentService {
     }
   }
 
+  private async submitToRelay(functionData: string): Promise<string> {
+    // Prepare relay request with ABC Testnet configuration
+    const request: SponsoredCallRequest = {
+      chainId: BigInt(112), // ABC Testnet Chain ID
+      target: this.agentContract.target as string,
+      data: functionData
+    };
+
+    // Add delay before final transaction
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Send the relay request
+    const response = await this.relay.sponsoredCall(
+      request,
+      this.sponsorKey
+    );
+
+    if (!response?.taskId) {
+      throw new Error('Failed to get task ID from relay');
+    }
+
+    console.log(`Transaction submitted to ABC Testnet. Task ID: ${response.taskId}`);
+
+    return response.taskId;
+  }
+
   private async getAgentInfo(): Promise<AgentInfo> {
     try {
       const response = await fetch(`${this.pool.baseUrl}/api/agent-info`);
@@ -242,5 +326,28 @@ export class AgentService {
       console.error('Error fetching agent info:', error);
       throw error;
     }
+  }
+
+  private async getPairReserves(pair: string): Promise<[bigint, bigint]> {
+    const pairContract = new ethers.Contract(
+      pair,
+      [
+        'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)'
+      ],
+      this.provider
+    );
+    const { reserve0, reserve1 } = await pairContract.getReserves();
+    return [BigInt(reserve0.toString()), BigInt(reserve1.toString())];
+  }
+
+  private async getToken0(pair: string): Promise<string> {
+    const pairContract = new ethers.Contract(
+      pair,
+      [
+        'function token0() external view returns (address)'
+      ],
+      this.provider
+    );
+    return await pairContract.token0();
   }
 } 

@@ -48,11 +48,22 @@ export class PoolService {
 
     if (relevantPools.length === 0) return null;
 
-    // Calculate risk scores
-    const poolsWithScores = relevantPools.map(pool => ({
-      pool,
-      score: this.calculateRiskScore(pool.apy, pool.slashingHistory, riskLevel)
-    }));
+    // For high risk (level 4), directly sort by APY
+    if (riskLevel === 4) {
+      const poolsByApy = [...relevantPools].sort((a, b) => b.apy - a.apy);
+      const bestPool = poolsByApy[0];
+      // Add the APY as the score for display purposes
+      (bestPool as any).riskScore = bestPool.apy;
+      return bestPool;
+    }
+
+    // For other risk levels, calculate risk scores
+    const poolsWithScores = relevantPools.map(pool => {
+      const score = this.calculateRiskScore(pool.apy, pool.slashingHistory, riskLevel);
+      // Store the score in the pool object for display purposes
+      (pool as any).riskScore = score;
+      return { pool, score };
+    });
 
     // Sort by score (higher is better)
     poolsWithScores.sort((a, b) => b.score - a.score);
@@ -61,21 +72,22 @@ export class PoolService {
   }
 
   private calculateRiskScore(apy: number, slashingHistory: number, riskLevel: number): number {
-    // Normalize risk level to 0-1
-    const normalizedRisk = riskLevel / 4;
+    // For low risk (risk level 1), heavily penalize slashing history
+    if (riskLevel === 1) {
+      const slashingPenalty = slashingHistory / 4;
+      return Math.max(0, apy * (1 - slashingPenalty));
+    }
 
-    // Calculate base score from APY
-    const apyScore = apy / 12; // Normalize APY (assuming max 12%)
+    // For medium risk (risk levels 2-3), use weighted approach
+    const weights = {
+      2: { apy: 0.7, slashing: 0.3 },
+      3: { apy: 0.9, slashing: 0.1 }
+    };
 
-    // Calculate risk penalty from slashing history
-    const slashingPenalty = slashingHistory / 4; // Normalize slashing (assuming max 4)
-
-    // Adjust weights based on risk level
-    const apyWeight = normalizedRisk;
-    const slashingWeight = 1 - normalizedRisk;
-
-    // Final score calculation
-    return (apyScore * apyWeight) - (slashingPenalty * slashingWeight);
+    const { apy: apyWeight, slashing: slashingWeight } = weights[riskLevel as 2 | 3];
+    const slashingPenalty = (slashingHistory / 4) * slashingWeight;
+    
+    return Math.max(0, apy * apyWeight * (1 - slashingPenalty));
   }
 
   async findArbitragePairs(): Promise<{

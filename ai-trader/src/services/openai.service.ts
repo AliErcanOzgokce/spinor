@@ -74,13 +74,18 @@ Respond with a strict JSON format containing:
       symbol: pool.token0Symbol,
       apy: pool.apy,
       slashingHistory: pool.slashingHistory,
-      riskScore: this.calculateRiskScore(pool.apy, pool.slashingHistory)
+      riskScore: riskLevel === 4 ? pool.apy : this.calculateRiskScore(pool.apy, pool.slashingHistory)
     }));
 
-    // Adjust risk tolerance based on user's risk level (1-4)
-    const riskTolerance = riskLevel / 4;
+    // For high risk (level 4), directly sort by APY
+    if (riskLevel === 4) {
+      return tokenMetrics.reduce((best, current) => 
+        !best || current.apy > best.apy ? current : best
+      );
+    }
 
-    // Find the token that best matches the risk tolerance
+    // For other risk levels, use risk score calculation
+    const riskTolerance = riskLevel / 4;
     return tokenMetrics.reduce((best, current) => {
       if (!best) return current;
       const bestDiff = Math.abs(best.riskScore - riskTolerance);
@@ -94,70 +99,185 @@ Respond with a strict JSON format containing:
     agentInfo: AgentInfo,
     bestToken: TokenMetrics | null
   ): Promise<TradeAction> {
-    const prompt = `
-Current pool data: ${JSON.stringify(pools)}
-Agent configuration: ${JSON.stringify(agentInfo.configuration)}
-Agent balances: ${JSON.stringify(agentInfo.balances)}
-Best token found: ${JSON.stringify(bestToken)}
+    if (!bestToken) {
+      return {
+        type: 'none',
+        reason: 'No suitable token found'
+      };
+    }
 
-Based on this data, what trading action should be taken? Consider:
-1. Current token balances
-2. Trading strategy (${agentInfo.configuration.tradeStrategy})
-3. Risk level (${agentInfo.configuration.riskLevel})
-4. Pool reserves and metrics
+    const { usdc, tokens, liquidityPools } = agentInfo.balances;
+    const usdcBalance = usdc.formatted;
+    const strategy = agentInfo.configuration.tradeStrategy;
 
-Respond with the optimal trading action in the specified JSON format.`;
+    // Find token balance
+    const tokenBalance = tokens.find(t => t.address.toLowerCase() === bestToken.address.toLowerCase());
+    const tokenAmount = tokenBalance ? tokenBalance.formatted : 0;
 
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          { role: "system", content: this.systemPrompt },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.1,
-        response_format: { type: "json_object" }
-      });
+    // Find LP balance
+    const lpBalance = liquidityPools.find(lp => lp.symbol.startsWith(bestToken.symbol));
+    const lpAmount = lpBalance ? lpBalance.formatted : 0;
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        console.error('Empty response from OpenAI');
+    // Strategy 2 and 4: Add Liquidity for LST/LRT
+    if (strategy === 2 || strategy === 4) {
+      // If we have no USDC, check if we should remove liquidity
+      if (usdcBalance === 0 && lpAmount > 0 && lpBalance) {
         return {
-          type: 'none',
-          reason: 'Failed to get response from OpenAI'
+          type: 'removeLiquidity',
+          tokenA: bestToken.address,
+          tokenB: this.usdcAddress,
+          amountA: lpBalance.balance,
+          reason: `Removing liquidity from ${bestToken.symbol}/USDC pool to rebalance`
         };
       }
 
-      const decision = JSON.parse(content) as TradeAction;
-      
-      // Validate the decision
-      if (!decision.type || !['swap', 'addLiquidity', 'removeLiquidity', 'none'].includes(decision.type)) {
-        console.error('Invalid action type in OpenAI response:', decision);
-        return {
-          type: 'none',
-          reason: 'Invalid action type received'
-        };
-      }
+      // If we have USDC, calculate optimal amounts
+      if (usdcBalance > 0) {
+        // Find pool reserves
+        const pool = pools.find(p => 
+          p.token0.toLowerCase() === bestToken.address.toLowerCase() || 
+          p.token1.toLowerCase() === bestToken.address.toLowerCase()
+        );
 
-      // For actions other than 'none', validate required fields
-      if (decision.type !== 'none') {
-        if (!decision.tokenA || !decision.tokenB || !decision.amountA || !decision.amountB) {
-          console.error('Missing required fields in OpenAI response:', decision);
+        // Check if we have enough USDC to make meaningful transactions (at least 1 USDC)
+        if (usdcBalance < 1) {
           return {
             type: 'none',
-            reason: 'Missing required fields in trading decision'
+            reason: `USDC balance (${usdcBalance}) too low for meaningful transactions`
+          };
+        }
+
+        // Use 20% of USDC balance for better capital efficiency (reduced from 95%)
+        // Convert USDC amount to wei (6 decimals)
+        const totalUsdcToUse = BigInt(Math.floor(usdcBalance * 0.2 * 1e6));
+
+        if (pool) {
+          // Get reserves in correct order
+          const [reserveToken, reserveUsdc] = pool.token0.toLowerCase() === bestToken.address.toLowerCase() 
+            ? [BigInt(pool.reserve0), BigInt(pool.reserve1)]
+            : [BigInt(pool.reserve1), BigInt(pool.reserve0)];
+
+          // Convert current token amount to wei (18 decimals)
+          const currentTokenAmount = BigInt(Math.floor(tokenAmount * 1e18));
+
+          // If we have no LP tokens yet, split USDC between swap and liquidity
+          // For strategy 4, always try to add liquidity regardless of LP token amount
+          if (lpAmount === 0 || strategy === 4) {
+            // Use 50% of USDC for swap and 50% for liquidity
+            const usdcForSwap = totalUsdcToUse / BigInt(2);
+            const usdcForLiquidity = totalUsdcToUse - usdcForSwap;
+
+            // Calculate optimal token amount for liquidity based on current pool ratio
+            // Current ratio = reserveToken / (reserveUsdc * 1e12)
+            // We want: optimalTokenAmount / (usdcForLiquidity * 1e12) = reserveToken / (reserveUsdc * 1e12)
+            // Therefore: optimalTokenAmount = (usdcForLiquidity * reserveToken) / reserveUsdc
+            const optimalTokenAmount = (usdcForLiquidity * reserveToken) / reserveUsdc;
+
+            // Log the amounts for debugging
+            console.log('Liquidity addition calculation:', {
+              totalUsdcToUse: totalUsdcToUse.toString(),
+              usdcForSwap: usdcForSwap.toString(),
+              usdcForLiquidity: usdcForLiquidity.toString(),
+              currentTokenAmount: currentTokenAmount.toString(),
+              optimalTokenAmount: optimalTokenAmount.toString(),
+              hasEnoughTokens: currentTokenAmount >= optimalTokenAmount,
+              reserves: {
+                token: reserveToken.toString(),
+                usdc: reserveUsdc.toString(),
+                isToken0: pool.token0.toLowerCase() === bestToken.address.toLowerCase()
+              }
+            });
+
+            // Check if we have enough tokens
+            if (currentTokenAmount >= optimalTokenAmount) {
+              // If we have enough tokens, add liquidity
+              // Match the token order in the pool
+              const isTokenToken0 = pool.token0.toLowerCase() === bestToken.address.toLowerCase();
+
+              // Calculate minimum amounts (90% of desired amounts for 10% slippage)
+              const minTokenAmount = (optimalTokenAmount * BigInt(90)) / BigInt(100);
+              const minUsdcAmount = (usdcForLiquidity * BigInt(90)) / BigInt(100);
+
+              return {
+                type: 'addLiquidity',
+                tokenA: isTokenToken0 ? bestToken.address : this.usdcAddress,
+                tokenB: isTokenToken0 ? this.usdcAddress : bestToken.address,
+                amountA: isTokenToken0 ? optimalTokenAmount.toString() : usdcForLiquidity.toString(),
+                amountB: isTokenToken0 ? usdcForLiquidity.toString() : optimalTokenAmount.toString(),
+                minAmountA: isTokenToken0 ? minTokenAmount.toString() : minUsdcAmount.toString(),
+                minAmountB: isTokenToken0 ? minUsdcAmount.toString() : minTokenAmount.toString(),
+                reason: `Adding liquidity to ${bestToken.symbol}/USDC pool with optimal ratio (${isTokenToken0 ? 'token is token0' : 'USDC is token0'})`
+              };
+            } else {
+              // Calculate how many more tokens we need
+              const additionalTokensNeeded = optimalTokenAmount - currentTokenAmount;
+              console.log('Need more tokens:', {
+                currentTokens: currentTokenAmount.toString(),
+                neededTokens: optimalTokenAmount.toString(),
+                additionalTokensNeeded: additionalTokensNeeded.toString(),
+                pool: {
+                  token0: pool.token0,
+                  token1: pool.token1,
+                  reserve0: pool.reserve0,
+                  reserve1: pool.reserve1,
+                  isTokenToken0: pool.token0.toLowerCase() === bestToken.address.toLowerCase()
+                }
+              });
+
+              // We need to swap first to get more tokens
+              return {
+                type: 'swap',
+                tokenA: this.usdcAddress,
+                tokenB: bestToken.address,
+                amountA: usdcForSwap.toString(),
+                amountB: '0',
+                reason: `Swapping USDC for ${bestToken.symbol} to prepare for liquidity provision (need ${additionalTokensNeeded.toString()} more tokens)`
+              };
+            }
+          } else {
+            // If we already have LP tokens, just swap
+            return {
+              type: 'swap',
+              tokenA: this.usdcAddress,
+              tokenB: bestToken.address,
+              amountA: totalUsdcToUse.toString(),
+              amountB: '0',
+              reason: `Swapping USDC for ${bestToken.symbol} based on strategy ${strategy}`
+            };
+          }
+        } else {
+          // If pool doesn't exist, swap first
+          return {
+            type: 'swap',
+            tokenA: this.usdcAddress,
+            tokenB: bestToken.address,
+            amountA: totalUsdcToUse.toString(),
+            amountB: '0',
+            reason: `Swapping USDC for ${bestToken.symbol} to prepare for new liquidity pool`
           };
         }
       }
+    }
 
-      return decision;
-    } catch (error) {
-      console.error('Failed to generate trade decision:', error);
+    // For other strategies, continue with normal swap logic
+    if (usdcBalance > 0) {
+      // Use 95% of USDC balance for swaps too
+      // Convert USDC amount to wei (6 decimals)
+      const swapAmount = BigInt(Math.floor(usdcBalance * 0.95 * 1e6)).toString();
       return {
-        type: 'none',
-        reason: 'Failed to generate valid trading decision'
+        type: 'swap',
+        tokenA: this.usdcAddress,
+        tokenB: bestToken.address,
+        amountA: swapAmount,
+        amountB: '0',
+        reason: `Swapping USDC for ${bestToken.symbol} based on strategy ${strategy}`
       };
     }
+
+    return {
+      type: 'none',
+      reason: 'No suitable action found'
+    };
   }
 
   async getTradeAction(
@@ -207,25 +327,13 @@ Respond with the optimal trading action in the specified JSON format.`;
 
       if (bestToken) {
         console.log(`Best token found: ${bestToken.symbol} with APY: ${bestToken.apy}% and risk score: ${bestToken.riskScore}`);
-        
-        // Check if we have USDC balance but no token balance
-        const usdcBalance = agentInfo.balances.usdc.balance;
-        const tokenBalance = agentInfo.balances.tokens.find(t => t.address.toLowerCase() === bestToken.address.toLowerCase())?.balance || '0';
-        
-        if (BigInt(usdcBalance) > BigInt(0) && BigInt(tokenBalance) === BigInt(0)) {
-          // We have USDC but no tokens, suggest a swap
-          return {
-            type: 'swap',
-            tokenA: this.usdcAddress, // USDC as input
-            tokenB: bestToken.address, // Best token as output
-            amountA: (BigInt(usdcBalance) * BigInt(8000) / BigInt(10000)).toString(), // Use 80% of USDC balance
-            amountB: '0', // Min amount out will be calculated by the contract
-            reason: `Swapping USDC for ${bestToken.symbol} to initiate trading position`
-          };
-        }
+        return this.generateTradeDecision(pools, agentInfo, bestToken);
       }
 
-      return this.generateTradeDecision(pools, agentInfo, bestToken);
+      return {
+        type: 'none',
+        reason: 'No suitable action found'
+      };
     } catch (error) {
       console.error('Error in getTradeAction:', error);
       return {
@@ -234,4 +342,4 @@ Respond with the optimal trading action in the specified JSON format.`;
       };
     }
   }
-} 
+}

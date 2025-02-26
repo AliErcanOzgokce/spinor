@@ -59,6 +59,8 @@ export interface TradeAction {
   tokenB?: string; // Token address
   amountA?: string;
   amountB?: string;
+  minAmountA?: string;
+  minAmountB?: string;
   reason: string;
 }
 

@@ -24,6 +24,10 @@ const historyAbiPath = path.join(__dirname, '../../hardhat/artifacts/contracts/h
 const AGENT_ABI = JSON.parse(fs.readFileSync(agentAbiPath, 'utf8')).abi;
 const HISTORY_ABI = JSON.parse(fs.readFileSync(historyAbiPath, 'utf8')).abi;
 
+// Minimal Router and Factory ABIs
+const ROUTER_ABI = ['function addLiquidity(address tokenA, address tokenB, uint amountADesired, uint amountBDesired, uint amountAMin, uint amountBMin, address to, uint deadline) external returns (uint amountA, uint amountB, uint liquidity)'];
+const FACTORY_ABI = ['function getPair(address tokenA, address tokenB) external view returns (address pair)'];
+
 // Environment variables
 const {
   RPC_URL,
@@ -82,7 +86,11 @@ async function main() {
       provider,
       deployments.agent,
       AGENT_ABI,
-      historyService
+      historyService,
+      deployments.router,
+      ROUTER_ABI,
+      deployments.factory,
+      FACTORY_ABI
     );
 
     // Start trading bot
