@@ -1,114 +1,103 @@
-import { config } from 'dotenv';
-import { PoolService } from './services/PoolService.js';
-import { AgentService } from './services/AgentService.js';
-import { AIAnalysisService } from './services/AIAnalysisService.js';
-import type { PoolInfo } from './models/Pool';
+import { ethers } from 'ethers';
+import dotenv from 'dotenv';
+import { AgentService } from './services/agent.service';
+import { HistoryService } from './services/history.service';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Load environment variables
-config();
+dotenv.config();
 
-class AITrader {
-    private poolService: PoolService;
-    private agentService: AgentService;
-    private aiService: AIAnalysisService;
-    private isRunning: boolean = false;
+// ES Module dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    constructor() {
-        this.poolService = new PoolService();
-        this.agentService = new AgentService();
-        this.aiService = new AIAnalysisService();
-    }
+// Load deployments and ABIs
+const deploymentsPath = path.join(__dirname, '../../hardhat/deployments.json');
+const deployments = JSON.parse(fs.readFileSync(deploymentsPath, 'utf8'));
 
-    private formatPoolInfo(pool: PoolInfo | null): string {
-        if (!pool) return 'No suitable pool found';
-        
-        return `
-${pool.token0Symbol}/${pool.token1Symbol}:
-- Pair Address: ${pool.pairAddress}
-- APY: ${pool.apy !== null ? `${pool.apy}%` : 'N/A'}
-- Slashing History: ${pool.slashingHistory !== null ? pool.slashingHistory : 'N/A'}
-- Reserves: ${pool.reserve0}/${pool.reserve1}
-        `.trim();
-    }
+// Load ABIs
+const agentAbiPath = path.join(__dirname, '../../hardhat/artifacts/contracts/agents/SpinorAgent.sol/SpinorAgent.json');
+const historyAbiPath = path.join(__dirname, '../../hardhat/artifacts/contracts/history/SpinorHistory.sol/SpinorHistory.json');
 
-    async analyze(): Promise<void> {
-        try {
-            // Fetch latest data
-            const [pools, agentConfig] = await Promise.all([
-                this.poolService.getPoolData(),
-                this.agentService.getAgentConfig()
-            ]);
+const AGENT_ABI = JSON.parse(fs.readFileSync(agentAbiPath, 'utf8')).abi;
+const HISTORY_ABI = JSON.parse(fs.readFileSync(historyAbiPath, 'utf8')).abi;
 
-            if (!agentConfig) {
-                console.log('No agent configuration available');
-                return;
-            }
+// Environment variables
+const {
+  RPC_URL,
+  CHAIN_ID,
+  NETWORK_NAME,
+  CURRENCY_SYMBOL,
+  OPENAI_API_KEY,
+  GELATO_SPONSOR_KEY,
+  PRIVATE_KEY,
+} = process.env;
 
-            const riskLevel = agentConfig.configuration.riskLevel;
-            
-            // Find best LST and LRT based on current risk level
-            const bestLST = this.poolService.findBestLST(pools, riskLevel);
-            const bestLRT = this.poolService.findBestLRT(pools, riskLevel);
-
-            // Get AI analysis
-            const [lstAnalysis, lrtAnalysis, marketSentiment] = await Promise.all([
-                bestLST ? this.aiService.analyzePool(bestLST, riskLevel) : Promise.resolve('No LST pool available'),
-                bestLRT ? this.aiService.analyzePool(bestLRT, riskLevel) : Promise.resolve('No LRT pool available'),
-                this.aiService.getMarketSentiment(pools)
-            ]);
-
-            console.clear();
-            console.log('='.repeat(50));
-            console.log('AI Trader Analysis');
-            console.log('='.repeat(50));
-            
-            console.log('\nRisk Level:', riskLevel);
-            console.log('\nMarket Sentiment:');
-            console.log(marketSentiment);
-            
-            console.log('\nBest LST Pool:');
-            console.log(this.formatPoolInfo(bestLST));
-            console.log('\nAI Analysis (LST):');
-            console.log(lstAnalysis);
-            
-            console.log('\nBest LRT Pool:');
-            console.log(this.formatPoolInfo(bestLRT));
-            console.log('\nAI Analysis (LRT):');
-            console.log(lrtAnalysis);
-            
-            console.log('\nUSDC Balance:', agentConfig.balances.usdc.formatted);
-            console.log('\nLast Update:', new Date().toLocaleTimeString());
-            console.log('='.repeat(50));
-
-        } catch (error) {
-            console.error('Error during analysis:', error);
-        }
-    }
-
-    async start(): Promise<void> {
-        if (this.isRunning) return;
-        
-        this.isRunning = true;
-        console.log('AI Trader started...');
-
-        while (this.isRunning) {
-            await this.analyze();
-            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-        }
-    }
-
-    stop(): void {
-        this.isRunning = false;
-        console.log('AI Trader stopped.');
-    }
+// Validate environment variables
+if (!RPC_URL || !OPENAI_API_KEY || !GELATO_SPONSOR_KEY || !PRIVATE_KEY) {
+  throw new Error('Missing required environment variables');
 }
 
-// Start the trader
-const trader = new AITrader();
-trader.start();
+// Validate deployments
+if (!deployments.agent || !deployments.history) {
+  throw new Error('Missing contract addresses in deployments.json');
+}
 
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-    trader.stop();
-    process.exit(0);
-}); 
+// Network configuration
+const network = {
+  name: NETWORK_NAME || 'ABC Testnet',
+  chainId: parseInt(CHAIN_ID || '112'),
+  currency: CURRENCY_SYMBOL || 'TEST'
+};
+
+async function main() {
+  try {
+    // Initialize provider with network configuration
+    const provider = new ethers.JsonRpcProvider(RPC_URL, {
+      name: network.name,
+      chainId: network.chainId
+    });
+
+    // Create signer from private key
+    const signer = new ethers.Wallet(PRIVATE_KEY, provider);
+
+    // Verify network connection
+    const connectedNetwork = await provider.getNetwork();
+    console.log(`Connected to network: ${connectedNetwork.name} (Chain ID: ${connectedNetwork.chainId})`);
+
+    // Initialize history service
+    const historyService = new HistoryService(
+      signer,
+      deployments.history,
+      HISTORY_ABI,
+      GELATO_SPONSOR_KEY
+    );
+
+    // Initialize agent service
+    const agentService = new AgentService(
+      OPENAI_API_KEY as string,
+      GELATO_SPONSOR_KEY as string,
+      provider,
+      deployments.agent,
+      AGENT_ABI,
+      historyService
+    );
+
+    // Start trading bot
+    await agentService.startTrading();
+
+    console.log('AI trader started successfully on ABC Testnet');
+    console.log('Using contracts:');
+    console.log('- Agent:', deployments.agent);
+    console.log('- History:', deployments.history);
+
+  } catch (error) {
+    console.error('Failed to start AI trader:', error);
+    process.exit(1);
+  }
+}
+
+// Start the application
+main(); 

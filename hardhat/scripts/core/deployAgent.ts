@@ -1,75 +1,58 @@
 import { ethers } from "hardhat";
-import * as fs from "fs";
-import { SpinorAgent } from "../../typechain-types";
+import fs from "fs";
+import path from "path";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
-    console.log("Deploying SpinorAgent with the account:", deployer.address);
+    console.log("Deploying contracts with account:", deployer.address);
 
-    // Load existing deployment info
-    const deploymentInfo = JSON.parse(
-        fs.readFileSync("deployments.json", "utf-8")
-    );
-
-    console.log("Using addresses:", {
-        router: deploymentInfo.router,
-        factory: deploymentInfo.factory,
-        usdc: deploymentInfo.usdc
-    });
+    // Read current deployments
+    const deploymentsPath = path.join(__dirname, "../../deployments.json");
+    const deployments = JSON.parse(fs.readFileSync(deploymentsPath, "utf8"));
 
     // Deploy SpinorAgent
     const SpinorAgent = await ethers.getContractFactory("SpinorAgent");
     const agent = await SpinorAgent.deploy(
-        deploymentInfo.router,
-        deploymentInfo.factory,
-        deploymentInfo.usdc,
-        4,
-        5
+        deployments.router,
+        deployments.factory,
+        deployments.usdc,
+        1, // Initial trade strategy
+        2  // Initial risk level
     );
     await agent.deployed();
     console.log("SpinorAgent deployed to:", agent.address);
 
-    // Pause the contract first if needed
-    const isPaused = await agent.paused();
-    if (!isPaused) {
-        console.log("Pausing the contract...");
-        const pauseTx = await agent.pause();
-        await pauseTx.wait();
-        console.log("Contract paused successfully");
-    }
+    // Deploy SpinorHistory
+    const SpinorHistory = await ethers.getContractFactory("SpinorHistory");
+    const history = await SpinorHistory.deploy();
+    await history.deployed();
+    console.log("SpinorHistory deployed to:", history.address);
 
-
-    // Unpause the contract if needed
-    console.log("Unpausing the contract...");
-    const unpauseTx = await agent.unpause();
-    await unpauseTx.wait();
-    console.log("Contract unpaused successfully");
-
-    // Update deployment info
-    deploymentInfo.agent = agent.address;
+    // Mint USDC to SpinorAgent
+    const usdcAmount = ethers.utils.parseUnits("10000", 6); // 10,000 USDC
+    const ERC20 = await ethers.getContractFactory("LST1"); // Using LST contract as it's an ERC20
+    const usdc = ERC20.attach(deployments.usdc);
     
-    // Save updated deployment info
-    fs.writeFileSync(
-        "deployments.json",
-        JSON.stringify(deploymentInfo, null, 2)
-    );
+    console.log("Minting USDC to SpinorAgent...");
+    const mintTx = await usdc.mint(agent.address, usdcAmount);
+    await mintTx.wait();
+    console.log("Minted 10,000 USDC to SpinorAgent");
 
-    console.log("Deployment info updated!");
+    // Verify USDC balance
+    const balance = await usdc.balanceOf(agent.address);
+    console.log("SpinorAgent USDC balance:", ethers.utils.formatUnits(balance, 6));
 
-    // Initialize the agent
-    console.log("\nInitializing SpinorAgent...");
-    
-    // Verify the configuration
-    const duration = await agent.duration();
-    console.log("\nVerifying configuration:");
-    console.log("- Duration:", duration.toString(), "seconds");
+    // Update deployments.json
+    deployments.agent = agent.address;
+    deployments.history = history.address;
+    fs.writeFileSync(deploymentsPath, JSON.stringify(deployments, null, 2));
+    console.log("Updated deployments.json");
 
-    console.log("\nDeployment completed successfully!");
-    console.log("You can now:");
-    console.log("1. Use the agent address:", agent.address);
-    console.log("2. Configure the agent (select tokens, etc.)");
-    console.log("3. Start the agent using the start() function");
-    console.log("4. The agent will automatically pause after 24 hours");
+    console.log("\nDeployment Summary:");
+    console.log("-------------------");
+    console.log("SpinorAgent:", agent.address);
+    console.log("SpinorHistory:", history.address);
+    console.log("USDC Balance:", ethers.utils.formatUnits(balance, 6));
 }
 
 main()

@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@nomiclabs/hardhat-ethers";
 import "@openzeppelin/hardhat-upgrades";
 import * as dotenv from "dotenv";
+import "./scripts/core/updateStrategy";
 
 dotenv.config();
 
@@ -26,6 +27,11 @@ const config: HardhatUserConfig = {
     abc: {
       url: process.env.RPC_URL,
       accounts: [process.env.PRIVATE_KEY]
+    },
+    abc_testnet: {
+      url: "https://rpc.abc.t.raas.gelato.cloud",
+      chainId: 112,
+      accounts: [process.env.PRIVATE_KEY || ""]
     }
   },
   paths: {

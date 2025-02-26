@@ -35,9 +35,6 @@ contract SpinorAgent is Ownable, Pausable {
     IUniswapV2Factory public factory;
     IERC20 public usdc;
     
-    // Current trading token
-    address public currentLst;
-
     // Duration management
     uint256 public duration;
     uint256 public startTime;
@@ -89,7 +86,7 @@ contract SpinorAgent is Ownable, Pausable {
      * @notice Sets the duration for the agent's active period
      * @param _duration Duration in seconds
      */
-    function setDuration(uint256 _duration) external onlyOwner whenPaused {
+    function setDuration(uint256 _duration) external whenPaused {
         require(_duration > 0, "Duration must be greater than 0");
         duration = _duration;
         emit DurationSet(_duration);
@@ -98,35 +95,12 @@ contract SpinorAgent is Ownable, Pausable {
     /**
      * @notice Starts the agent with the set duration
      */
-    function start() external onlyOwner whenPaused {
+    function start() external whenPaused {
         require(duration > 0, "Duration not set");
         startTime = block.timestamp;
         isActive = true;
         _unpause();
         emit AgentStarted(startTime, startTime + duration);
-    }
-
-    /**
-     * @dev Modifier to ensure the contract has sufficient token balance
-     * @param token The token to check balance for
-     * @param amount The required amount
-     */
-    modifier sufficientBalance(IERC20 token, uint256 amount) {
-        require(
-            token.balanceOf(address(this)) >= amount,
-            "Insufficient balance"
-        );
-        _;
-    }
-
-    /**
-     * @notice Sets the token to trade with
-     * @param token Address of the LST or LRT token to trade
-     */
-    function selectToken(address token) external onlyOwner checkDuration {
-        require(token != address(0), "Invalid token address");
-        require(token != address(usdc), "Cannot select USDC as token");
-        currentLst = token;
     }
 
     /**
@@ -136,9 +110,10 @@ contract SpinorAgent is Ownable, Pausable {
      */
     function deposit(address token, uint256 amount) external whenPaused {
         require(amount > 0, "Amount must be greater than 0");
-        require(token == address(usdc) || token == currentLst, "Invalid token");
+        require(token == address(usdc), "Only USDC deposits allowed");
         
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        emit USDCDeposited(msg.sender, amount);
     }
 
     /**
@@ -148,29 +123,43 @@ contract SpinorAgent is Ownable, Pausable {
      */
     function withdraw(address token, uint256 amount) external whenPaused {
         require(amount > 0, "Amount must be greater than 0");
-        require(token == address(usdc) || token == currentLst, "Invalid token");
         
         IERC20(token).safeTransfer(msg.sender, amount);
+        if (token == address(usdc)) {
+            emit USDCWithdrawn(msg.sender, amount);
+        }
     }
 
     /**
-     * @notice Executes a swap between the current token and USDC
+     * @notice Executes a swap between any token and USDC
+     * @param tokenAddress Address of the token to swap with USDC
      * @param amountIn Amount of tokens to swap
      * @param minAmountOut Minimum amount of tokens to receive
      * @param isUsdcIn Whether USDC is the input token
      */
     function executeSwap(
+        address tokenAddress,
         uint256 amountIn,
         uint256 minAmountOut,
         bool isUsdcIn
     ) external whenNotPaused checkDuration {
-        require(currentLst != address(0), "Token not selected");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(tokenAddress != address(usdc), "Cannot swap USDC for USDC");
         require(amountIn > 0, "Amount must be greater than 0");
         
-        address tokenIn = isUsdcIn ? address(usdc) : currentLst;
-        address tokenOut = isUsdcIn ? currentLst : address(usdc);
+        address tokenIn = isUsdcIn ? address(usdc) : tokenAddress;
+        address tokenOut = isUsdcIn ? tokenAddress : address(usdc);
+        
+        // Check if pair exists
+        address pair = factory.getPair(tokenAddress, address(usdc));
+        require(pair != address(0), "Pair does not exist");
+        
+        // Check balance
+        uint256 balance = IERC20(tokenIn).balanceOf(address(this));
+        require(balance >= amountIn, "Insufficient balance for swap");
         
         // Approve router if needed
+        IERC20(tokenIn).safeApprove(address(router), 0); // Reset approval
         IERC20(tokenIn).safeApprove(address(router), amountIn);
         
         // Create path for swap
@@ -191,29 +180,40 @@ contract SpinorAgent is Ownable, Pausable {
     }
 
     /**
-     * @notice Adds liquidity to the current token/USDC pair
-     * @param tokenAmount Amount of current token to add
+     * @notice Adds liquidity to any token/USDC pair
+     * @param tokenAddress Address of the token to add liquidity with
+     * @param tokenAmount Amount of token to add
      * @param usdcAmount Amount of USDC to add
      * @param minTokenAmount Minimum token amount to add as liquidity
      * @param minUsdcAmount Minimum USDC amount to add as liquidity
      */
     function addLiquidity(
+        address tokenAddress,
         uint256 tokenAmount,
         uint256 usdcAmount,
         uint256 minTokenAmount,
         uint256 minUsdcAmount
     ) external whenNotPaused checkDuration {
-        require(currentLst != address(0), "Token not selected");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(tokenAddress != address(usdc), "Cannot add USDC-USDC liquidity");
         require(tokenAmount > 0 && usdcAmount > 0, "Amounts must be greater than 0");
         
-        // Approve router if needed
-        IERC20(currentLst).safeApprove(address(router), tokenAmount);
+        // Check balances
+        uint256 tokenBalance = IERC20(tokenAddress).balanceOf(address(this));
+        uint256 usdcBalance = usdc.balanceOf(address(this));
+        require(tokenBalance >= tokenAmount, "Insufficient token balance");
+        require(usdcBalance >= usdcAmount, "Insufficient USDC balance");
+        
+        // Reset and approve router
+        IERC20(tokenAddress).safeApprove(address(router), 0);
+        IERC20(address(usdc)).safeApprove(address(router), 0);
+        IERC20(tokenAddress).safeApprove(address(router), tokenAmount);
         IERC20(address(usdc)).safeApprove(address(router), usdcAmount);
         
         // Add liquidity
         (uint256 amountToken, uint256 amountUsdc,) = 
             router.addLiquidity(
-                currentLst,
+                tokenAddress,
                 address(usdc),
                 tokenAmount,
                 usdcAmount,
@@ -223,34 +223,42 @@ contract SpinorAgent is Ownable, Pausable {
                 block.timestamp
             );
             
-        emit LiquidityAdded(currentLst, amountToken, amountUsdc);
+        emit LiquidityAdded(tokenAddress, amountToken, amountUsdc);
     }
 
     /**
-     * @notice Removes liquidity from the current token/USDC pair
+     * @notice Removes liquidity from any token/USDC pair
+     * @param tokenAddress Address of the token in the pair
      * @param lpTokens Amount of LP tokens to burn
      * @param minTokenAmount Minimum token amount to receive
      * @param minUsdcAmount Minimum USDC amount to receive
      */
     function removeLiquidity(
+        address tokenAddress,
         uint256 lpTokens,
         uint256 minTokenAmount,
         uint256 minUsdcAmount
     ) external whenNotPaused checkDuration {
-        require(currentLst != address(0), "Token not selected");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(tokenAddress != address(usdc), "Cannot remove USDC-USDC liquidity");
         require(lpTokens > 0, "LP tokens must be greater than 0");
         
         // Get pair address
-        address pair = factory.getPair(currentLst, address(usdc));
+        address pair = factory.getPair(tokenAddress, address(usdc));
         require(pair != address(0), "Pair does not exist");
         
-        // Approve router to spend LP tokens
+        // Check LP token balance
+        uint256 lpBalance = IERC20(pair).balanceOf(address(this));
+        require(lpBalance >= lpTokens, "Insufficient LP token balance");
+        
+        // Reset and approve router
+        IERC20(pair).safeApprove(address(router), 0);
         IERC20(pair).safeApprove(address(router), lpTokens);
         
         // Remove liquidity
         (uint256 amountToken, uint256 amountUsdc) = 
             router.removeLiquidity(
-                currentLst,
+                tokenAddress,
                 address(usdc),
                 lpTokens,
                 minTokenAmount,
@@ -259,12 +267,11 @@ contract SpinorAgent is Ownable, Pausable {
                 block.timestamp
             );
             
-        emit LiquidityRemoved(currentLst, amountToken, amountUsdc);
+        emit LiquidityRemoved(tokenAddress, amountToken, amountUsdc);
     }
 
     /**
      * @notice Pauses the contract
-     * @dev Only callable by owner
      */
     function pause() external onlyOwner {
         isActive = false;
@@ -273,7 +280,6 @@ contract SpinorAgent is Ownable, Pausable {
 
     /**
      * @notice Unpauses the contract
-     * @dev Only callable by owner
      */
     function unpause() external onlyOwner {
         require(duration > 0, "Duration not set");
@@ -303,5 +309,23 @@ contract SpinorAgent is Ownable, Pausable {
             return 0;
         }
         return (startTime + duration) - block.timestamp;
+    }
+
+    /**
+     * @notice Updates the trade strategy
+     * @param _strategy New strategy value (1-5)
+     */
+    function setTradeStrategy(uint256 _strategy) external onlyOwner {
+        require(_strategy >= 1 && _strategy <= 5, "Invalid strategy value");
+        tradeStrategy = _strategy;
+    }
+
+    /**
+     * @notice Updates the risk level
+     * @param _risk New risk level (1-4)
+     */
+    function setRiskLevel(uint256 _risk) external onlyOwner {
+        require(_risk >= 1 && _risk <= 4, "Invalid risk level");
+        riskLevel = _risk;
     }
 } 
