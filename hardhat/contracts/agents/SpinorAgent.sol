@@ -18,6 +18,7 @@ import "../dex/interfaces/IUniswapV2Pair.sol";
  * - Perform automated swaps between USDC and LST tokens
  * - Add and remove liquidity from Uniswap V2 pools
  * - Auto-pause after duration expires
+ * - Execute arbitrage between two pools for the same token pair
  */
 contract SpinorAgent is Ownable, Pausable {
     using SafeERC20 for IERC20;
@@ -35,6 +36,10 @@ contract SpinorAgent is Ownable, Pausable {
     IUniswapV2Factory public factory;
     IERC20 public usdc;
     
+    // Alternative DEX contracts for arbitrage
+    IUniswapV2Router public alternativeRouter;
+    IUniswapV2Factory public alternativeFactory;
+    
     // Duration management
     uint256 public duration;
     uint256 public startTime;
@@ -49,6 +54,15 @@ contract SpinorAgent is Ownable, Pausable {
     event DurationSet(uint256 duration);
     event AgentStarted(uint256 startTime, uint256 endTime);
     event AgentExpired(uint256 endTime);
+    event ArbitrageExecuted(
+        address indexed token, 
+        address indexed buyRouter, 
+        address indexed sellRouter, 
+        uint256 startUsdcAmount, 
+        uint256 endUsdcAmount, 
+        uint256 profit
+    );
+    event AlternativeRouterSet(address indexed router, address indexed factory);
 
     /**
      * @dev Modifier to check if the duration has expired
@@ -327,5 +341,124 @@ contract SpinorAgent is Ownable, Pausable {
     function setRiskLevel(uint256 _risk) external onlyOwner {
         require(_risk >= 1 && _risk <= 4, "Invalid risk level");
         riskLevel = _risk;
+    }
+
+    /**
+     * @notice Sets the alternative router and factory for arbitrage
+     * @param _router Alternative router address
+     * @param _factory Alternative factory address
+     */
+    function setAlternativeRouter(address _router, address _factory) external onlyOwner {
+        require(_router != address(0), "Invalid router address");
+        require(_factory != address(0), "Invalid factory address");
+        require(_router != address(router), "Cannot use same router");
+        require(_factory != address(factory), "Cannot use same factory");
+        
+        alternativeRouter = IUniswapV2Router(_router);
+        alternativeFactory = IUniswapV2Factory(_factory);
+        
+        emit AlternativeRouterSet(_router, _factory);
+    }
+    
+    /**
+     * @notice Executes an arbitrage trade between two pools of the same token pair
+     * @dev Buys token on one AMM and sells on another to exploit price differences
+     * @param tokenAddress The token to trade against USDC
+     * @param usdcAmount Amount of USDC to use for arbitrage
+     * @param useFirstPoolForBuy True if buying from primary pool, false if buying from alternative pool
+     * @param minProfitAmount Minimum profit required in USDC
+     */
+    function arbitrage(
+        address tokenAddress,
+        uint256 usdcAmount,
+        bool useFirstPoolForBuy,
+        uint256 minProfitAmount
+    ) external whenNotPaused checkDuration {
+        require(alternativeRouter != IUniswapV2Router(address(0)), "Alternative router not set");
+        require(alternativeFactory != IUniswapV2Factory(address(0)), "Alternative factory not set");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(tokenAddress != address(usdc), "Cannot arbitrage USDC with itself");
+        require(usdcAmount > 0, "Amount must be greater than 0");
+        
+        // Check if pairs exist in both pools
+        address pair1 = factory.getPair(tokenAddress, address(usdc));
+        address pair2 = alternativeFactory.getPair(tokenAddress, address(usdc));
+        require(pair1 != address(0), "Pair does not exist in primary pool");
+        require(pair2 != address(0), "Pair does not exist in alternative pool");
+        
+        // Ensure we have enough USDC
+        uint256 usdcBalance = usdc.balanceOf(address(this));
+        require(usdcBalance >= usdcAmount, "Insufficient USDC balance");
+        
+        // Store initial USDC balance to calculate profit
+        uint256 initialUsdcBalance = usdc.balanceOf(address(this));
+        
+        // Store router references based on trade direction
+        IUniswapV2Router buyRouter;
+        IUniswapV2Router sellRouter;
+        
+        if (useFirstPoolForBuy) {
+            buyRouter = router;
+            sellRouter = alternativeRouter;
+        } else {
+            buyRouter = alternativeRouter;
+            sellRouter = router;
+        }
+        
+        // Step 1: Buy tokens with USDC in the first pool
+        // Approve the Buy router to use USDC
+        usdc.safeApprove(address(buyRouter), 0); // Reset approval
+        usdc.safeApprove(address(buyRouter), usdcAmount);
+        
+        // Create path for swap
+        address[] memory buyPath = new address[](2);
+        buyPath[0] = address(usdc);
+        buyPath[1] = tokenAddress;
+        
+        // Execute first swap (USDC → Token)
+        uint[] memory buyAmounts = buyRouter.swapExactTokensForTokens(
+            usdcAmount,
+            1, // Accept any amount of tokens (we're arbitraging, so any amount should work)
+            buyPath,
+            address(this),
+            block.timestamp
+        );
+        
+        uint256 tokenAmount = buyAmounts[buyAmounts.length - 1];
+        
+        // Step 2: Sell tokens for USDC in the second pool
+        // Approve the Sell router to use tokens
+        IERC20(tokenAddress).safeApprove(address(sellRouter), 0); // Reset approval
+        IERC20(tokenAddress).safeApprove(address(sellRouter), tokenAmount);
+        
+        // Create path for swap
+        address[] memory sellPath = new address[](2);
+        sellPath[0] = tokenAddress;
+        sellPath[1] = address(usdc);
+        
+        // Execute second swap (Token → USDC)
+        sellRouter.swapExactTokensForTokens(
+            tokenAmount,
+            1, // Accept any amount of USDC (should be profitable, but we check that later)
+            sellPath,
+            address(this),
+            block.timestamp
+        );
+        
+        // Calculate profit
+        uint256 finalUsdcBalance = usdc.balanceOf(address(this));
+        require(finalUsdcBalance > initialUsdcBalance, "Arbitrage resulted in a loss");
+        
+        uint256 profit = finalUsdcBalance - initialUsdcBalance;
+        require(profit >= minProfitAmount, "Profit below minimum threshold");
+        
+        emit ArbitrageExecuted(
+            tokenAddress, 
+            address(buyRouter), 
+            address(sellRouter), 
+            usdcAmount, 
+            finalUsdcBalance, 
+            profit
+        );
     }
 } 

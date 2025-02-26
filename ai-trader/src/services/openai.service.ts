@@ -48,6 +48,31 @@ Respond with a strict JSON format containing:
     return (normalizedApy * apyWeight) - (normalizedSlashing * slashingWeight);
   }
 
+  /**
+   * Generate AI-powered analysis of arbitrage opportunities
+   * @param prompt Detailed prompt with arbitrage opportunity data
+   * @returns AI-generated analysis and recommendation
+   */
+  async generateAIArbitrageAnalysis(prompt: string): Promise<string> {
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a DeFi arbitrage specialist. Analyze opportunities and provide clear advice.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3, // Lower temperature for more consistent responses
+        max_tokens: 150 // Keep responses concise
+      });
+
+      const analysis = response.choices[0]?.message?.content?.trim() || 'Unable to generate analysis';
+      return analysis;
+    } catch (error) {
+      console.error('Error generating arbitrage analysis:', error);
+      return 'Error: Unable to analyze arbitrage opportunity due to AI service issue.';
+    }
+  }
+
   private findBestToken(
     pools: PoolReserves[],
     riskLevel: number,

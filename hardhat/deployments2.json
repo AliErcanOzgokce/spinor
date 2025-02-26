@@ -1,0 +1,78 @@
+{
+  "factory": "0xb16B38Ba7c189d4aAe20A36c7643150C55B4c43C",
+  "router": "0x4abF7832035d137Da8cD9165443419437BADdb9d",
+  "pairs": {
+    "LST1": {
+      "address": "0x76Ebfaa530A53eE454509f417c01068532764169",
+      "token": "0x765eC58a58B1De2F14Ca6a88f0c4CD8967BBeadF",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "100000000000",
+      "reserve1": "112000000000000000000000",
+      "token0": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "token1": "0x765eC58a58B1De2F14Ca6a88f0c4CD8967BBeadF"
+    },
+    "LST2": {
+      "address": "0xcaBF0cD98dd7B06D66B47149beA50F9B00d7e8F6",
+      "token": "0x583244c44d04d6FFe9693Def783F39492852D664",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "113000000000000000000000",
+      "reserve1": "100000000000",
+      "token0": "0x583244c44d04d6FFe9693Def783F39492852D664",
+      "token1": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b"
+    },
+    "LST3": {
+      "address": "0x84fD143698e6780C151987E81Cb0fa1FF38cFBBF",
+      "token": "0xb3CbfB95A57318A8764F0533F5e43600daf18B07",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "100000000000",
+      "reserve1": "94000000000000000000000",
+      "token0": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "token1": "0xb3CbfB95A57318A8764F0533F5e43600daf18B07"
+    },
+    "LST4": {
+      "address": "0xD0fadFA99CFD300540f1222A7d98a8BBE2524AD5",
+      "token": "0x22a994FC9e4799AD4878075a9d43579D42D712F9",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "87000000000000000000000",
+      "reserve1": "100000000000",
+      "token0": "0x22a994FC9e4799AD4878075a9d43579D42D712F9",
+      "token1": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b"
+    },
+    "LRT1": {
+      "address": "0x2dceB6e2F26B1119A379312545Ddc667Aa5B00A9",
+      "token": "0xd579B67eb5dBe576A5D94260778bFE969139441d",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "100000000000",
+      "reserve1": "93000000000000000000000",
+      "token0": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "token1": "0xd579B67eb5dBe576A5D94260778bFE969139441d"
+    },
+    "LRT2": {
+      "address": "0xEd3Ec4aDb19cc7DaA1e1d5d71bdB1E071869ED93",
+      "token": "0xC36232cdffb63D88AC7B36A3d94025535a9179f2",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "100000000000",
+      "reserve1": "89000000000000000000000",
+      "token0": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "token1": "0xC36232cdffb63D88AC7B36A3d94025535a9179f2"
+    },
+    "LRT3": {
+      "address": "0x3406a9137De9D1b66d4f38e13B478AB0f082832a",
+      "token": "0x9EfDd2E0E9A55378626cB244997B2763d0D2ec1F",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "100000000000",
+      "reserve1": "114000000000000000000000",
+      "token0": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "token1": "0x9EfDd2E0E9A55378626cB244997B2763d0D2ec1F"
+    },
+    "LRT4": {
+      "address": "0xB1Da3b586f68A52444a6DC3ED65C59f83aE3E80B",
+      "token": "0x279CED13DfE2A4373A72EEdD1382DE4F39152bB0",
+      "usdc": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b",
+      "reserve0": "95000000000000000000000",
+      "reserve1": "100000000000",
+      "token0": "0x279CED13DfE2A4373A72EEdD1382DE4F39152bB0",
+      "token1": "0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b"
+    }
+  }
+}
