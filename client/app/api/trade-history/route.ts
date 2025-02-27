@@ -1,32 +1,37 @@
 import { ethers } from 'ethers';
 import { NextResponse } from 'next/server';
 import { SPINOR_HISTORY_ABI } from '@/constants/abis';
+import { SPINOR_HISTORY_ADDRESS } from '@/constants/contracts';
 
-const HISTORY_ADDRESS = '0xB1ea9b87B5F7551F15aa620970ED13E4C0A85eC8';
-const RPC_URL = 'https://rpc.abc.t.raas.gelato.cloud';
+// Known block range where trades exist
+const FIRST_TRADE_BLOCK = 7087951;
+const BLOCK_RANGE = 1000; // Small buffer for new trades
 
 export async function GET() {
   try {
-    const provider = new ethers.JsonRpcProvider(RPC_URL, {
-      chainId: 112,
-      name: 'ABC Testnet'
-    });
+    const provider = new ethers.JsonRpcProvider('https://rpc.abc.t.raas.gelato.cloud');
+    const contract = new ethers.Contract(SPINOR_HISTORY_ADDRESS, SPINOR_HISTORY_ABI, provider);
     
-    const historyContract = new ethers.Contract(HISTORY_ADDRESS, SPINOR_HISTORY_ABI, provider);
-
-    // Get current block number
+    console.log('Fetching trade history...');
+    
+    // Get current block
     const currentBlock = await provider.getBlockNumber();
-    // Get events from last 50,000 blocks (adjust this number based on your needs)
-    const fromBlock = Math.max(0, currentBlock - 50000);
-
-    // Get trade history
-    const events = await historyContract.queryFilter(
-      historyContract.filters.TradeRecorded(),
-      fromBlock,
-      'latest'
-    );
-
-    // Format events
+    console.log('Current block:', currentBlock);
+    
+    // Get trade count for verification
+    const tradeCount = await contract.getTradeCount();
+    console.log('Total trades:', tradeCount.toString());
+    
+    // Query only the known block range
+    const fromBlock = FIRST_TRADE_BLOCK;
+    const toBlock = FIRST_TRADE_BLOCK + BLOCK_RANGE;
+    
+    console.log(`Fetching events from block ${fromBlock} to ${toBlock}...`);
+    
+    const filter = contract.filters.TradeRecorded();
+    const events = await contract.queryFilter(filter, fromBlock, toBlock);
+    console.log('Found events:', events.length);
+    
     const trades = events
       .filter((e): e is ethers.Log & { args: any[] } => 'args' in e)
       .map(event => {
@@ -81,13 +86,16 @@ export async function GET() {
         };
       })
       .sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
-
+    
+    console.log('Processed trades:', trades.length);
+    
     return NextResponse.json({
       success: true,
-      data: trades,
+      data: trades
     });
+    
   } catch (error: any) {
-    console.error('Failed to fetch trade history:', error);
+    console.error('Trade history error:', error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 }

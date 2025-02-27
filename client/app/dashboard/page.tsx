@@ -14,6 +14,8 @@ import { formatUnits } from 'ethers'
 import { useAccount } from 'wagmi'
 import { ethers } from 'ethers'
 import { getStrategyName, getRiskLevelName, getRiskLevelColor } from '@/utils/trade'
+import { AgentControlModal } from '@/components/dashboard/AgentControlModal'
+import { SPINOR_AGENT_ADDRESS } from '@/constants/contracts'
 
 interface Token {
   symbol: string
@@ -33,6 +35,36 @@ interface Asset {
   holdings: string
   price: string
   apy: string
+}
+
+interface AgentInfo {
+  address: string;
+  name: string;
+  riskLevel: number;
+  strategy: number;
+  isActive: boolean;
+  holdings: string;
+  profit: string;
+  totalPL: string;
+}
+
+interface TradeHistoryResponse {
+  success: boolean;
+  trades: Array<{
+    timestamp: string;
+    actionType: string;
+    tokenA: string;
+    tokenB: string;
+    amountA: string;
+    amountB: string;
+    reason: string;
+    txHash: string;
+    status: string;
+    tradeStrategy: string;
+    riskLevel: string;
+    pnl: string;
+    apy: string;
+  }>;
 }
 
 // Helper functions
@@ -128,26 +160,30 @@ const AssetRow = ({ asset }: { asset: any }) => (
 )
 
 // Agent Row Component
-const AgentRow = ({ agent }: { agent: any }) => (
+const AgentRow = ({ agent, onManage }: { agent: AgentInfo; onManage: () => void }) => (
   <motion.div
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
     className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 
-              border border-gray-100/20 dark:border-white/[0.08]"
+              border border-gray-100/20 dark:border-white/[0.08] hover:border-primary-500/20 
+              dark:hover:border-primary-400/20 transition-colors duration-300"
   >
     {/* Icon */}
     <div className="w-8 h-8 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center mr-4">
       <span className="text-xs font-medium text-primary-700 dark:text-primary-300">A</span>
     </div>
 
-    {/* Name */}
+    {/* Name and Strategy */}
     <div className="flex-1">
       <p className="font-medium text-gray-900 dark:text-white">{agent.name}</p>
+      <p className="text-sm text-gray-500">{getStrategyName(agent.strategy)}</p>
     </div>
 
     {/* Risk Level */}
     <div className="w-32 text-center">
-      <p className="font-medium text-gray-900 dark:text-white">{agent.riskLevel}</p>
+      <p className={`font-medium ${getRiskLevelColor(agent.riskLevel)}`}>
+        {getRiskLevelName(agent.riskLevel)}
+      </p>
     </div>
 
     {/* Holdings */}
@@ -163,6 +199,17 @@ const AgentRow = ({ agent }: { agent: any }) => (
     {/* Total P/L */}
     <div className="w-32 text-right">
       <p className="font-medium text-green-500 dark:text-green-400">{agent.totalPL}%</p>
+    </div>
+
+    {/* Manage Button */}
+    <div className="ml-4">
+      <button
+        onClick={onManage}
+        className="px-4 py-2 bg-primary-500 text-white rounded-lg font-medium 
+                 hover:bg-primary-600 transition-colors duration-200"
+      >
+        Manage
+      </button>
     </div>
   </motion.div>
 )
@@ -271,6 +318,9 @@ export default function DashboardPage() {
   const { address } = useAccount()
   const [error, setError] = useState<string | null>(null)
   const [showAllAssets, setShowAllAssets] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null)
+  const [isAgentModalOpen, setIsAgentModalOpen] = useState(false)
+  const [agents, setAgents] = useState<AgentInfo[]>([])
   
   const fetchData = async () => {
     try {
@@ -285,16 +335,22 @@ export default function DashboardPage() {
       const poolResponse = await fetch('http://localhost:3000/api/pool-reserves')
       const poolData = await poolResponse.json()
 
-      // Fetch user balances from local API
+      // Fetch user balances from API
       const userResponse = await fetch(`/api/user-balances?address=${address}`)
+      if (!userResponse.ok) {
+        throw new Error('Failed to fetch user balances')
+      }
       const userData = await userResponse.json()
 
-      // Fetch trade history from local API
+      // Fetch trade history from API
       const historyResponse = await fetch('/api/trade-history')
+      if (!historyResponse.ok) {
+        throw new Error('Failed to fetch trade history')
+      }
       const historyData = await historyResponse.json()
 
       if (!agentData.success || !poolData.success || !userData.success || !historyData.success) {
-        throw new Error('Failed to fetch data')
+        throw new Error('One or more API calls failed')
       }
 
       const agentInfo = agentData.data
@@ -302,13 +358,25 @@ export default function DashboardPage() {
       const userBalances = userData.data
       const trades = historyData.data
 
-      // Calculate average APY from pools
-      const avgApy = calculateAverageApy(pools, agentInfo.balances.tokens)
-
       // Calculate total PNL from arbitrage trades (strategy 5)
       const totalPnl = trades
         .filter(t => t.tradeStrategy === 5)
         .reduce((sum, t) => sum + t.pnl, 0)
+
+      // Set agents list
+      setAgents([{
+        address: SPINOR_AGENT_ADDRESS,
+        name: 'Spinor Agent',
+        riskLevel: agentInfo.configuration.riskLevel,
+        strategy: agentInfo.configuration.tradeStrategy,
+        isActive: agentInfo.isActive,
+        holdings: agentInfo.balances.usdc.formatted.toFixed(2),
+        profit: totalPnl.toFixed(2),
+        totalPL: ((totalPnl / agentInfo.balances.usdc.formatted) * 100).toFixed(2)
+      }])
+
+      // Calculate average APY from pools
+      const avgApy = calculateAverageApy(pools, agentInfo.balances.tokens)
 
       // Set stats
       setStats([
@@ -348,7 +416,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  };
 
   const calculateAverageApy = (pools: Pool[], tokens: Token[]) => {
     if (!tokens.length) return 0
@@ -453,6 +521,32 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Agents Section */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">My Agents</h2>
+          </div>
+
+          <div className="space-y-4">
+            {loading ? (
+              <AmountSkeleton />
+            ) : agents.length > 0 ? (
+              agents.map((agent, index) => (
+                <AgentRow
+                  key={index}
+                  agent={agent}
+                  onManage={() => {
+                    setSelectedAgent(agent)
+                    setIsAgentModalOpen(true)
+                  }}
+                />
+              ))
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">No agents found.</p>
+            )}
+          </div>
+        </div>
+
         {/* Trade History Section */}
         <div className="backdrop-blur-sm bg-gray-900/50 rounded-xl shadow-sm border border-gray-800/50">
           <div className="p-6 border-b border-gray-800/50">
@@ -500,6 +594,22 @@ export default function DashboardPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
       />
+
+      {/* Agent Control Modal */}
+      {selectedAgent && (
+        <AgentControlModal
+          isOpen={isAgentModalOpen}
+          onClose={() => setIsAgentModalOpen(false)}
+          agentAddress={selectedAgent.address}
+          currentStrategy={selectedAgent.strategy}
+          currentRiskLevel={selectedAgent.riskLevel}
+          isActive={selectedAgent.isActive}
+          onSuccess={() => {
+            setIsAgentModalOpen(false)
+            fetchData()
+          }}
+        />
+      )}
     </>
   )
 }

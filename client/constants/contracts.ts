@@ -1,0 +1,7 @@
+// Contract addresses from deployments.json
+export const SPINOR_AGENT_ADDRESS = '0x1151180290CAa1Ab4e3d9d9E5C226Af6259b7f87';
+export const SPINOR_HISTORY_ADDRESS = '0xB1ea9b87B5F7551F15aa620970ED13E4C0A85eC8';
+
+// Router and Factory addresses
+export const SPINOR_ROUTER_ADDRESS = '0xbad4cd744F1aFf811859Ba9523Bd0bb3a766913D';
+export const SPINOR_FACTORY_ADDRESS = '0x258Ca93BC0EBBaEDf8f3728e6B15C792a4f81Ea4'; 
