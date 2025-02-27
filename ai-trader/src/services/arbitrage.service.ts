@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import type { PoolReserves, AgentInfo, TradeAction } from '../types';
+import { HistoryService } from './history.service';
 
 /**
  * Service for detecting and executing arbitrage opportunities
@@ -18,6 +19,7 @@ export class ArbitrageService {
   private readonly relay: GelatoRelay;
   private readonly sponsorKey: string;
   private readonly usdcAddress: string = '0x5b4Df904F6DDb52fa6c92a8e175d44B89bEec30b'; // USDC from deployments.json
+  private readonly history: HistoryService;
   
   // Contract instances
   private readonly agentContract: ethers.Contract;
@@ -37,19 +39,22 @@ export class ArbitrageService {
    * @param sponsorKey Gelato sponsor key
    * @param agentAddress SpinorAgent contract address
    * @param agentAbi SpinorAgent contract ABI
+   * @param historyService History service
    */
   constructor(
     provider: ethers.Provider,
     openaiApiKey: string,
     sponsorKey: string,
     agentAddress: string,
-    agentAbi: ethers.InterfaceAbi
+    agentAbi: ethers.InterfaceAbi,
+    historyService: HistoryService
   ) {
     this.provider = provider;
     this.sponsorKey = sponsorKey;
     this.relay = new GelatoRelay();
     this.openai = new OpenAIService(openaiApiKey, this.usdcAddress);
     this.agentContract = new ethers.Contract(agentAddress, agentAbi, provider);
+    this.history = historyService;
     
     this.initializeContracts().catch(error => {
       console.error('Failed to initialize contracts:', error);
@@ -461,14 +466,14 @@ Should I execute this arbitrage? Provide a brief analysis and indicate Yes or No
     opportunity: ArbitrageOpportunity,
     agentInfo: AgentInfo
   ): Promise<string> {
+    // Store initial USDC balance for PnL calculation
+    const initialUsdcBalance = BigInt(agentInfo.balances.usdc.balance);
+    
     // Calculate reasonable USDC amount to use (based on balance and risk)
-    const usdcBalance = BigInt(agentInfo.balances.usdc.balance);
-    
-    // Use 10-30% of balance based on risk level (1-4)
     const riskPercent = BigInt(10 + (agentInfo.configuration.riskLevel - 1) * 5);
-    const usdcToUse = (usdcBalance * riskPercent) / BigInt(100);
+    const usdcToUse = (initialUsdcBalance * riskPercent) / BigInt(100);
     
-    // Calculate minimum profit amount (at least 0.5%)
+    // Calculate minimum profit amount (at least 0.1%)
     const minProfitAmount = (usdcToUse * BigInt(this.MIN_PROFIT_BPS)) / BigInt(10000);
     
     // Prepare contract call data
@@ -494,6 +499,32 @@ Should I execute this arbitrage? Provide a brief analysis and indicate Yes or No
       // Submit to Gelato Relay
       const response = await this.relay.sponsoredCall(request, this.sponsorKey);
       console.log('Arbitrage transaction submitted to Gelato Relay');
+
+      // Wait for transaction confirmation
+      const taskInfo = await this.waitForRelay(response.taskId);
+
+      // Get updated agent info for PnL calculation
+      const updatedAgentInfo = await this.getAgentInfo();
+      const finalUsdcBalance = BigInt(updatedAgentInfo.balances.usdc.balance);
+
+      // Calculate actual PnL
+      const pnl = Number((finalUsdcBalance - initialUsdcBalance)) / 1e6; // Convert to USDC decimals
+
+      // Record trade history
+      await this.history.recordTrade(
+        {
+          type: 'swap',
+          tokenA: this.usdcAddress, // USDC is always tokenA
+          tokenB: opportunity.tokenAddress, // LST/LRT token is always tokenB
+          amountA: usdcToUse.toString(),
+          reason: `Arbitrage trade: Buy from ${opportunity.buyFromPrimary ? 'primary' : 'secondary'} pool, sell in ${opportunity.buyFromPrimary ? 'secondary' : 'primary'} pool`
+        },
+        taskInfo,
+        agentInfo,
+        pnl,
+        0 // No APY for arbitrage trades
+      );
+
       return response.taskId;
     } catch (error) {
       console.error('Failed to execute arbitrage transaction:', error);
@@ -508,7 +539,7 @@ Should I execute this arbitrage? Provide a brief analysis and indicate Yes or No
    */
   async waitForRelay(taskId: string): Promise<any> {
     let retries = 0;
-    const maxRetries = 12; // 1 minute with 5-second intervals
+    const maxRetries = 10;
     
     while (retries < maxRetries) {
       try {
@@ -540,6 +571,25 @@ Should I execute this arbitrage? Provide a brief analysis and indicate Yes or No
     }
     
     throw new Error(`Transaction timed out after ${maxRetries} attempts`);
+  }
+
+  private async getAgentInfo(): Promise<AgentInfo> {
+    try {
+      const response = await fetch(`http://localhost:3000/api/agent-info`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch agent info: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+      
+      return data.data;
+    } catch (error) {
+      console.error('Error fetching agent info:', error);
+      throw error;
+    }
   }
 }
 

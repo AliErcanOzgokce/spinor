@@ -49,7 +49,6 @@ const {
   OPENAI_API_KEY,
   GELATO_SPONSOR_KEY,
   PRIVATE_KEY,
-  STRATEGY_MODE = 'REGULAR' // Default to regular trading if not specified
 } = process.env;
 
 // Validate environment variables
@@ -179,9 +178,11 @@ async function main() {
 
     // Initialize history service
     const historyService = new HistoryService(
-      signer,
       deployments.history,
-      HISTORY_ABI
+      HISTORY_ABI,
+      signer,
+      deployments.agent,
+      AGENT_ABI
     );
 
     // Initialize agent service
@@ -204,11 +205,12 @@ async function main() {
       process.env.OPENAI_API_KEY!,
       process.env.GELATO_SPONSOR_KEY!,
       deployments.agent,
-      AGENT_ABI
+      AGENT_ABI,
+      historyService
     );
 
     // Get agent's current strategy
-    const agentContract = new ethers.Contract(deployments.agent, AGENT_ABI, provider);
+    const agentContract = new ethers.Contract(deployments.agent, AGENT_ABI, signer);
     const tradeStrategy = await agentContract.tradeStrategy();
 
     // Start appropriate trading mode based on agent's strategy
@@ -216,6 +218,16 @@ async function main() {
       if (!deployments2) {
         throw new Error('Arbitrage strategy requires deployments2.json, but it was not found');
       }
+      
+      // Set alternative router and factory in agent contract
+      console.log('Setting alternative router and factory...');
+      const tx = await agentContract.setAlternativeRouter(
+        deployments2.router,
+        deployments2.factory
+      );
+      await tx.wait();
+      console.log('Alternative router and factory set successfully');
+      
       console.log('Starting AI trader in Arbitrage mode...');
       await startArbitrageTrading(arbitrageService, agentService);
     } else {

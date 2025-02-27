@@ -69,8 +69,10 @@ export interface TradeHistory {
   action: TradeAction;
   txHash: string;
   status: 'success' | 'failed';
-  gasUsed: string;
-  blockNumber: number;
+  tradeStrategy: number;
+  riskLevel: number;
+  pnl: number;
+  apy: number;
 }
 
 export enum TradeStrategy {

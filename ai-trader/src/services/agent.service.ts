@@ -4,7 +4,7 @@ import { PoolService } from './pool.service';
 import { HistoryService } from './history.service';
 import { GelatoRelay } from '@gelatonetwork/relay-sdk';
 import type { SponsoredCallRequest } from '@gelatonetwork/relay-sdk';
-import type { TradeAction, AgentInfo } from '../types';
+import type { TradeAction, AgentInfo, PoolReserves } from '../types';
 
 export class AgentService {
   private readonly openai: OpenAIService;
@@ -65,6 +65,15 @@ export class AgentService {
           continue;
         }
 
+        // Store initial balances for PnL calculation
+        const initialUsdcBalance = agentInfo.balances.usdc.formatted;
+        const initialTokenBalances = new Map(
+          agentInfo.balances.tokens.map(t => [t.address.toLowerCase(), t.formatted])
+        );
+        const initialLpBalances = new Map(
+          agentInfo.balances.liquidityPools.map(lp => [lp.pairAddress.toLowerCase(), lp.formatted])
+        );
+
         // Execute the trade
         console.log('Executing strategy:', agentInfo.configuration.tradeStrategy, 'with risk level:', agentInfo.configuration.riskLevel);
         const taskId = await this.executeTransaction(action);
@@ -72,10 +81,23 @@ export class AgentService {
 
         // Wait for transaction confirmation
         const taskInfo = await this.waitForRelay(taskId);
+
+        // Get updated agent info for PnL calculation
+        const updatedAgentInfo = await this.getAgentInfo();
+
+        // Calculate PnL and APY
+        const { pnl, apy } = await this.calculateTradeMetrics(
+          action,
+          initialUsdcBalance,
+          initialTokenBalances,
+          initialLpBalances,
+          updatedAgentInfo,
+          pools
+        );
         
         // Record trade history
-        await this.history.recordTrade(action, taskInfo);
-        console.log('Trade history recorded');
+        await this.history.recordTrade(action, taskInfo, agentInfo, pnl, apy);
+        console.log('Trade history recorded with PnL:', pnl, 'and APY:', apy);
 
         // Wait before next market check
         console.log('TEST MODE: Waiting for 5 seconds before next market check...');
@@ -86,6 +108,105 @@ export class AgentService {
         // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
+    }
+  }
+
+  private async calculateTradeMetrics(
+    action: TradeAction,
+    initialUsdcBalance: number,
+    initialTokenBalances: Map<string, number>,
+    initialLpBalances: Map<string, number>,
+    updatedAgentInfo: AgentInfo,
+    pools: PoolReserves[]
+  ): Promise<{ pnl: number; apy: number }> {
+    const finalUsdcBalance = updatedAgentInfo.balances.usdc.formatted;
+    let pnl = 0;
+    let apy = 0;
+
+    try {
+      // Get strategy from agent info
+      const strategy = updatedAgentInfo.configuration.tradeStrategy;
+
+      // For strategies 1-4 (LST/LRT trading and liquidity)
+      if (strategy >= 1 && strategy <= 4) {
+        switch (action.type) {
+          case 'swap': {
+            // For swaps, calculate PnL in USDC terms
+            const tokenAddress = action.tokenA?.toLowerCase() === this.usdcAddress.toLowerCase()
+              ? action.tokenB?.toLowerCase()
+              : action.tokenA?.toLowerCase();
+
+            if (tokenAddress) {
+              const initialTokenBalance = initialTokenBalances.get(tokenAddress) || 0;
+              const finalTokenBalance = updatedAgentInfo.balances.tokens
+                .find(t => t.address.toLowerCase() === tokenAddress)?.formatted || 0;
+
+              // Get token price from pool
+              const pool = pools.find(p =>
+                (p.token0.toLowerCase() === tokenAddress && p.token1.toLowerCase() === this.usdcAddress.toLowerCase()) ||
+                (p.token1.toLowerCase() === tokenAddress && p.token0.toLowerCase() === this.usdcAddress.toLowerCase())
+              );
+
+              if (pool) {
+                const tokenPrice = this.calculateTokenPrice(pool, tokenAddress);
+                const tokenValueChange = (finalTokenBalance - initialTokenBalance) * tokenPrice;
+                pnl = (finalUsdcBalance - initialUsdcBalance) + tokenValueChange;
+              }
+            }
+            break;
+          }
+
+          case 'addLiquidity':
+          case 'removeLiquidity': {
+            const tokenAddress = action.tokenA?.toLowerCase() === this.usdcAddress.toLowerCase()
+              ? action.tokenB?.toLowerCase()
+              : action.tokenA?.toLowerCase();
+
+            if (tokenAddress) {
+              const pairAddress = await this.factory.getPair(tokenAddress, this.usdcAddress);
+              const initialLpBalance = initialLpBalances.get(pairAddress.toLowerCase()) || 0;
+              const finalLpBalance = updatedAgentInfo.balances.liquidityPools
+                .find(lp => lp.pairAddress.toLowerCase() === pairAddress.toLowerCase())?.formatted || 0;
+
+              // Get pool APY only for liquidity strategies (2 and 4)
+              const pool = pools.find(p => p.pairAddress.toLowerCase() === pairAddress.toLowerCase());
+              if (pool) {
+                if (strategy === 2 || strategy === 4) {
+                  apy = pool.apy;
+                }
+                
+                // Calculate impermanent loss and fees earned
+                const tokenPrice = this.calculateTokenPrice(pool, tokenAddress);
+                const lpValueChange = (finalLpBalance - initialLpBalance) * tokenPrice;
+                pnl = (finalUsdcBalance - initialUsdcBalance) + lpValueChange;
+              }
+            }
+            break;
+          }
+        }
+      }
+      // For strategy 5 (Arbitrage)
+      else if (strategy === 5) {
+        // For arbitrage, we only care about PnL
+        pnl = finalUsdcBalance - initialUsdcBalance;
+        apy = 0; // No APY for arbitrage
+      }
+    } catch (error) {
+      console.error('Error calculating trade metrics:', error);
+    }
+
+    return { pnl, apy };
+  }
+
+  private calculateTokenPrice(pool: PoolReserves, tokenAddress: string): number {
+    const isToken0 = pool.token0.toLowerCase() === tokenAddress.toLowerCase();
+    const reserve0 = parseFloat(pool.reserve0);
+    const reserve1 = parseFloat(pool.reserve1);
+
+    if (isToken0) {
+      return reserve1 / reserve1; // Price in terms of USDC
+    } else {
+      return reserve0 / reserve1;
     }
   }
 
@@ -185,8 +306,8 @@ export class AgentService {
           const finalAmountToken = optimalTokenAmount * BigInt(500) / BigInt(100);  // 400% extra buffer
           
           // Set minimum amounts with 10% slippage (90% of actual amounts)
-          const minAmountToken = finalAmountToken * BigInt(10) / BigInt(100);  // 90% of token amount (10% slippage)
-          const minAmountUsdc = scaledAmountUsdc * BigInt(10) / BigInt(100);   // 90% of USDC amount (10% slippage)
+          const minAmountToken = finalAmountToken * BigInt(5) / BigInt(100);  // 90% of token amount (10% slippage)
+          const minAmountUsdc = scaledAmountUsdc * BigInt(5) / BigInt(100);   // 90% of USDC amount (10% slippage)
 
           console.log('Final amounts:', {
             scaledAmountToken: finalAmountToken.toString(),
@@ -281,32 +402,6 @@ export class AgentService {
       console.error('Failed to execute transaction:', error);
       throw error;
     }
-  }
-
-  private async submitToRelay(functionData: string): Promise<string> {
-    // Prepare relay request with ABC Testnet configuration
-    const request: SponsoredCallRequest = {
-      chainId: BigInt(112), // ABC Testnet Chain ID
-      target: this.agentContract.target as string,
-      data: functionData
-    };
-
-    // Add delay before final transaction
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Send the relay request
-    const response = await this.relay.sponsoredCall(
-      request,
-      this.sponsorKey
-    );
-
-    if (!response?.taskId) {
-      throw new Error('Failed to get task ID from relay');
-    }
-
-    console.log(`Transaction submitted to ABC Testnet. Task ID: ${response.taskId}`);
-
-    return response.taskId;
   }
 
   private async getAgentInfo(): Promise<AgentInfo> {

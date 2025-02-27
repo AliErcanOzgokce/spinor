@@ -19,8 +19,10 @@ contract SpinorHistory is Ownable {
         string reason,
         bytes32 txHash,
         string status,
-        uint256 gasUsed,
-        uint256 blockNumber
+        uint256 tradeStrategy,
+        uint256 riskLevel,
+        int256 pnl,
+        uint256 apy
     );
 
     // Structs
@@ -34,18 +36,19 @@ contract SpinorHistory is Ownable {
         string reason;
         bytes32 txHash;
         string status;
-        uint256 gasUsed;
-        uint256 blockNumber;
+        uint256 tradeStrategy;
+        uint256 riskLevel;
+        int256 pnl;
+        uint256 apy;
     }
 
     // State variables
-    mapping(bytes32 => TradeRecord) public trades;
-    bytes32[] public tradeHashes;
+    TradeRecord[] public tradeHistory;
 
     /**
-     * @notice Records a trade in the history
-     * @param timestamp Time when the trade occurred
-     * @param actionType Type of action (swap/addLiquidity/removeLiquidity)
+     * @notice Records a trade in history
+     * @param timestamp Time of the trade
+     * @param actionType Type of action (swap, addLiquidity, removeLiquidity)
      * @param tokenA First token address
      * @param tokenB Second token address
      * @param amountA Amount of first token
@@ -53,8 +56,10 @@ contract SpinorHistory is Ownable {
      * @param reason Reason for the trade
      * @param txHash Transaction hash
      * @param status Transaction status
-     * @param gasUsed Gas used in the transaction
-     * @param blockNumber Block number of the transaction
+     * @param tradeStrategy Current trade strategy (1-5)
+     * @param riskLevel Current risk level (1-4)
+     * @param pnl Profit/Loss in USDC (can be negative)
+     * @param apy Current APY for LST/LRT strategies
      */
     function recordTradeHistory(
         uint256 timestamp,
@@ -66,11 +71,15 @@ contract SpinorHistory is Ownable {
         string memory reason,
         bytes32 txHash,
         string memory status,
-        uint256 gasUsed,
-        uint256 blockNumber
+        uint256 tradeStrategy,
+        uint256 riskLevel,
+        int256 pnl,
+        uint256 apy
     ) external {
         require(txHash != bytes32(0), "Invalid transaction hash");
         require(bytes(actionType).length > 0, "Invalid action type");
+        require(tradeStrategy >= 1 && tradeStrategy <= 5, "Invalid trade strategy");
+        require(riskLevel >= 1 && riskLevel <= 4, "Invalid risk level");
 
         TradeRecord memory record = TradeRecord({
             timestamp: timestamp,
@@ -82,12 +91,13 @@ contract SpinorHistory is Ownable {
             reason: reason,
             txHash: txHash,
             status: status,
-            gasUsed: gasUsed,
-            blockNumber: blockNumber
+            tradeStrategy: tradeStrategy,
+            riskLevel: riskLevel,
+            pnl: pnl,
+            apy: apy
         });
 
-        trades[txHash] = record;
-        tradeHashes.push(txHash);
+        tradeHistory.push(record);
 
         emit TradeRecorded(
             timestamp,
@@ -99,40 +109,18 @@ contract SpinorHistory is Ownable {
             reason,
             txHash,
             status,
-            gasUsed,
-            blockNumber
+            tradeStrategy,
+            riskLevel,
+            pnl,
+            apy
         );
     }
 
     /**
-     * @notice Gets the total number of trades recorded
-     * @return Number of trades
+     * @notice Gets the total number of trades
+     * @return uint256 Number of trades
      */
     function getTradeCount() external view returns (uint256) {
-        return tradeHashes.length;
-    }
-
-    /**
-     * @notice Gets trade records for a range of indices
-     * @param start Start index
-     * @param end End index (exclusive)
-     * @return Array of trade records
-     */
-    function getTradeRange(uint256 start, uint256 end)
-        external
-        view
-        returns (TradeRecord[] memory)
-    {
-        require(start < end, "Invalid range");
-        require(end <= tradeHashes.length, "End out of bounds");
-
-        uint256 length = end - start;
-        TradeRecord[] memory records = new TradeRecord[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            records[i] = trades[tradeHashes[start + i]];
-        }
-
-        return records;
+        return tradeHistory.length;
     }
 } 
