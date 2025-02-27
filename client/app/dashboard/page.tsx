@@ -363,8 +363,8 @@ export default function DashboardPage() {
         .filter(t => t.tradeStrategy === 5)
         .reduce((sum, t) => sum + t.pnl, 0)
 
-      // Set agents list
-      setAgents([{
+      // Set agents list - first add current agent
+      const currentAgent = {
         address: SPINOR_AGENT_ADDRESS,
         name: 'Spinor Agent',
         riskLevel: agentInfo.configuration.riskLevel,
@@ -373,7 +373,17 @@ export default function DashboardPage() {
         holdings: agentInfo.balances.usdc.formatted.toFixed(2),
         profit: totalPnl.toFixed(2),
         totalPL: ((totalPnl / agentInfo.balances.usdc.formatted) * 100).toFixed(2)
-      }])
+      };
+
+      // Then fetch and add other agents from agents.json
+      const agentsResponse = await fetch('/api/agents');
+      if (!agentsResponse.ok) {
+        throw new Error('Failed to fetch additional agents');
+      }
+      const agentsData = await agentsResponse.json();
+      
+      // Combine current agent with other agents
+      setAgents([currentAgent, ...(agentsData.success ? agentsData.data : [])]);
 
       // Calculate average APY from pools
       const avgApy = calculateAverageApy(pools, agentInfo.balances.tokens)
