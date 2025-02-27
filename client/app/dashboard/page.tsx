@@ -1,23 +1,86 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowTrendingUpIcon } from '@heroicons/react/24/outline'
+import { ArrowTrendingUpIcon, ArrowTrendingDownIcon, ArrowsRightLeftIcon, PlusIcon, MinusIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import { AnimatedBackground } from '@/components/shared/AnimatedBackground'
 import CreateAgentModal from '@/components/dashboard/CreateAgentModal'
 import Link from 'next/link'
+import { AmountSkeleton } from '@/components/shared/AmountSkeleton'
+import { TradeDetailsModal } from '@/components/dashboard/TradeDetailsModal'
+import { Switch } from '@/components/ui/switch'
+import { TOKENS } from '@/constants/tokens'
+import { formatUnits } from 'ethers'
+import { useAccount } from 'wagmi'
+import { ethers } from 'ethers'
+import { getStrategyName, getRiskLevelName, getRiskLevelColor } from '@/utils/trade'
+
+interface Token {
+  symbol: string
+  address: string
+  formatted: number
+  balance: string
+}
+
+interface Pool {
+  token0Symbol: string
+  token1Symbol: string
+  apy: number
+}
+
+interface Asset {
+  name: string
+  holdings: string
+  price: string
+  apy: string
+}
+
+// Helper functions
+const formatAmount = (amount: string, decimals: number) => {
+  return parseFloat(formatUnits(amount, decimals)).toFixed(6)
+}
+
+const getTokenSymbol = (address: string) => {
+  return Object.values(TOKENS).find(token => token.address.toLowerCase() === address.toLowerCase())?.symbol || address;
+};
+
+const getTokenDecimals = (address: string) => {
+  return Object.values(TOKENS).find(token => token.address.toLowerCase() === address.toLowerCase())?.decimals || 18;
+};
+
+const getActionIcon = (type: string) => {
+  switch (type) {
+    case 'swap':
+      return <ArrowsRightLeftIcon className="h-5 w-5" />;
+    case 'addLiquidity':
+      return <PlusIcon className="h-5 w-5" />;
+    case 'removeLiquidity':
+      return <MinusIcon className="h-5 w-5" />;
+    default:
+      return <InformationCircleIcon className="h-5 w-5" />;
+  }
+};
 
 // Stats Card Component
-const StatsCard = ({ title, value }: { title: string; value: string }) => (
+const StatsCard = ({ title, value, isApy = false }: { title: string; value: string; isApy?: boolean }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className="bg-white/60 dark:bg-white/[0.03] backdrop-blur-lg rounded-xl border border-gray-100/20 
-              dark:border-white/[0.08] p-4 hover:border-primary-500/20 dark:hover:border-primary-400/20 
-              transition-colors duration-300"
+              dark:border-white/[0.08] p-6 hover:border-primary-500/20 dark:hover:border-primary-400/20 
+              transition-colors duration-300 w-full"
   >
     <h3 className="text-sm text-gray-500 dark:text-gray-400">{title}</h3>
-    <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{value}</p>
+    {isApy ? (
+      <div className="flex items-center gap-2 mt-2">
+        <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+          <ArrowTrendingUpIcon className="w-4 h-4 text-green-500 dark:text-green-400" />
+        </div>
+        <p className="text-2xl font-semibold text-green-500 dark:text-green-400">{value}</p>
+      </div>
+    ) : (
+      <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-2">{value}</p>
+    )}
   </motion.div>
 )
 
@@ -33,33 +96,32 @@ const AssetRow = ({ asset }: { asset: any }) => (
     {/* Token Icons */}
     <div className="flex -space-x-2 mr-4">
       <div className="w-8 h-8 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center z-10">
-        <span className="text-xs font-medium text-primary-700 dark:text-primary-300">E</span>
-      </div>
-      <div className="w-8 h-8 bg-primary-50 dark:bg-white/[0.05] rounded-full flex items-center justify-center">
-        <span className="text-xs font-medium text-primary-600 dark:text-primary-400">U</span>
+        <span className="text-xs font-medium text-primary-700 dark:text-primary-300">
+          {asset.name.charAt(0)}
+        </span>
       </div>
     </div>
 
-    {/* Name */}
+    {/* Name and Holdings */}
     <div className="flex-1">
       <p className="font-medium text-gray-900 dark:text-white">{asset.name}</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {asset.tokenAmount} tokens
+      </p>
     </div>
 
     {/* APY */}
     <div className="px-4 text-right">
+      <p className="text-sm text-gray-500 dark:text-gray-400">APY</p>
       <div className="flex items-center justify-end gap-1 text-green-500 dark:text-green-400">
         <ArrowTrendingUpIcon className="w-4 h-4" />
         <span className="font-medium">{asset.apy}%</span>
       </div>
     </div>
 
-    {/* Price */}
+    {/* Holdings in USD */}
     <div className="w-32 text-right">
-      <p className="font-medium text-gray-900 dark:text-white">${asset.price}</p>
-    </div>
-
-    {/* Holdings */}
-    <div className="w-32 text-right">
+      <p className="text-sm text-gray-500 dark:text-gray-400">Value</p>
       <p className="font-medium text-gray-900 dark:text-white">${asset.holdings}</p>
     </div>
   </motion.div>
@@ -106,71 +168,208 @@ const AgentRow = ({ agent }: { agent: any }) => (
 )
 
 // Trade History Row Component
-const TradeRow = ({ trade }: { trade: any }) => (
-  <motion.div
-    initial={{ opacity: 0, x: -20 }}
-    animate={{ opacity: 1, x: 0 }}
-    className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 
-              border border-gray-100/20 dark:border-white/[0.08]"
-  >
-    {/* Buy/Sell */}
-    <div className="w-32">
-      <div className="flex items-center space-x-2">
-        <span className="font-medium text-gray-900 dark:text-white">{trade.buy}</span>
-        <span className="text-gray-500 dark:text-gray-400">/</span>
-        <span className="font-medium text-gray-900 dark:text-white">{trade.sell}</span>
+const TradeRow = ({ trade, onClick }: { trade: any; onClick: () => void }) => {
+  const tokenASymbol = getTokenSymbol(trade.action.tokenA)
+  const tokenBSymbol = getTokenSymbol(trade.action.tokenB)
+  const tokenADecimals = getTokenDecimals(trade.action.tokenA)
+  const tokenBDecimals = getTokenDecimals(trade.action.tokenB)
+
+  // Calculate final USDC amount for arbitrage
+  const finalUsdcAmount = trade.tradeStrategy === 5 
+    ? (parseFloat(formatAmount(trade.action.amountA, tokenADecimals)) + trade.pnl).toFixed(6)
+    : '0'
+
+  return (
+    <div className="p-4 flex items-center justify-between gap-4">
+      {/* Left side - Action and Tokens */}
+      <div className="flex items-center gap-4 flex-1">
+        <div className="w-10 h-10 bg-gray-900/50 rounded-full flex items-center justify-center">
+          {getActionIcon(trade.action.type)}
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-white capitalize">
+              {trade.action.type}
+            </p>
+            <span className="text-sm text-gray-400">•</span>
+            <p className="text-sm text-gray-400">
+              {new Date(trade.timestamp * 1000).toLocaleString()}
+            </p>
+          </div>
+          {trade.tradeStrategy === 5 ? (
+            <div className="flex items-center gap-1 text-sm text-gray-300 mt-0.5">
+              <span className="font-medium">{formatAmount(trade.action.amountA, tokenADecimals)}</span>
+              <span className="text-gray-500">{tokenASymbol}</span>
+              <span className="text-gray-500 mx-1">→</span>
+              <span className="font-medium">{formatAmount(trade.action.amountB, tokenBDecimals)}</span>
+              <span className="text-gray-500">{tokenBSymbol}</span>
+              <span className="text-gray-500 mx-1">→</span>
+              <span className="font-medium">{finalUsdcAmount}</span>
+              <span className="text-gray-500">{tokenASymbol}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-sm text-gray-300 mt-0.5">
+              <span className="font-medium">{formatAmount(trade.action.amountA, tokenADecimals)}</span>
+              <span className="text-gray-500">{tokenASymbol}</span>
+              {trade.action.amountB !== '0' && (
+                <>
+                  <span className="text-gray-500 mx-1">→</span>
+                  <span className="font-medium">{formatAmount(trade.action.amountB, tokenBDecimals)}</span>
+                  <span className="text-gray-500">{tokenBSymbol}</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Middle - Strategy and Risk Level */}
+      <div className="flex flex-col items-end">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white">
+            {getStrategyName(trade.tradeStrategy)}
+          </span>
+        </div>
+        <span className={`text-sm ${getRiskLevelColor(trade.riskLevel)}`}>
+          {getRiskLevelName(trade.riskLevel)}
+        </span>
+      </div>
+
+      {/* Right side - Performance */}
+      <div className="w-32 flex justify-end">
+        {trade.tradeStrategy === 5 ? (
+          <div className="flex items-center gap-2">
+            {trade.pnl >= 0 ? (
+              <ArrowTrendingUpIcon className="w-5 h-5 text-green-500" />
+            ) : (
+              <ArrowTrendingDownIcon className="w-5 h-5 text-red-500" />
+            )}
+            <p className={`font-medium ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              ${Math.abs(trade.pnl).toFixed(2)}
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <ArrowTrendingUpIcon className="w-5 h-5 text-green-500" />
+            <p className="font-medium text-green-500">{trade.apy.toFixed(2)}%</p>
+          </div>
+        )}
       </div>
     </div>
-
-    {/* Amount In */}
-    <div className="flex-1 text-right">
-      <p className="font-medium text-gray-900 dark:text-white">{trade.amountIn}</p>
-    </div>
-
-    {/* Amount Out */}
-    <div className="w-32 text-right">
-      <p className="font-medium text-gray-900 dark:text-white">{trade.amountOut}</p>
-    </div>
-
-    {/* APY Profit */}
-    <div className="w-32 text-right">
-      <p className="font-medium text-green-500 dark:text-green-400">{trade.apyProfit}%</p>
-    </div>
-  </motion.div>
-)
+  )
+}
 
 export default function DashboardPage() {
+  const [selectedTrade, setSelectedTrade] = useState<any>(null)
+  const [isTradeModalOpen, setIsTradeModalOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<any[]>([])
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [trades, setTrades] = useState<any[]>([])
+  const [showAgentAssets, setShowAgentAssets] = useState(false)
+  const { address } = useAccount()
+  const [error, setError] = useState<string | null>(null)
+  const [showAllAssets, setShowAllAssets] = useState(false)
   
-  // Mock data
-  const stats = [
-    { title: 'Balance', value: '$1,252' },
-    { title: 'Total Earnings', value: '$341' },
-    { title: 'Estimated APY', value: '12.3%' }
-  ]
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-  const assets = Array(4).fill({
-    name: 'aETH/USDC',
-    apy: '7.23',
-    price: '2,843.65',
-    holdings: '752'
-  })
+      // Fetch agent info from backend
+      const agentResponse = await fetch('http://localhost:3000/api/agent-info')
+      const agentData = await agentResponse.json()
 
-  const agents = [{
-    name: 'aliAI',
-    riskLevel: 4,
-    holdings: '2,843.65',
-    profit: '752',
-    totalPL: '341'
-  }]
+      // Fetch pool reserves from backend
+      const poolResponse = await fetch('http://localhost:3000/api/pool-reserves')
+      const poolData = await poolResponse.json()
 
-  const trades = Array(3).fill({
-    buy: 'aETH',
-    sell: 'bETH',
-    amountIn: '172.5',
-    amountOut: '173.4',
-    apyProfit: '0.03'
-  })
+      // Fetch user balances from local API
+      const userResponse = await fetch(`/api/user-balances?address=${address}`)
+      const userData = await userResponse.json()
+
+      // Fetch trade history from local API
+      const historyResponse = await fetch('/api/trade-history')
+      const historyData = await historyResponse.json()
+
+      if (!agentData.success || !poolData.success || !userData.success || !historyData.success) {
+        throw new Error('Failed to fetch data')
+      }
+
+      const agentInfo = agentData.data
+      const pools = poolData.data
+      const userBalances = userData.data
+      const trades = historyData.data
+
+      // Calculate average APY from pools
+      const avgApy = calculateAverageApy(pools, agentInfo.balances.tokens)
+
+      // Calculate total PNL from arbitrage trades (strategy 5)
+      const totalPnl = trades
+        .filter(t => t.tradeStrategy === 5)
+        .reduce((sum, t) => sum + t.pnl, 0)
+
+      // Set stats
+      setStats([
+        {
+          title: 'Balance',
+          value: showAgentAssets 
+            ? `$${agentInfo.balances.usdc.formatted.toFixed(2)}`
+            : `$${userBalances.usdc.formatted.toFixed(2)}`
+        },
+        {
+          title: 'Estimated APY',
+          value: `${avgApy.toFixed(2)}%`,
+          isApy: true
+        },
+        {
+          title: 'Total PNL',
+          value: `$${totalPnl.toFixed(2)}`
+        }
+      ])
+
+      // Set assets based on view type
+      const assetList = showAgentAssets ? agentInfo.balances : userBalances
+      const filteredAssets = assetList.tokens
+        .filter(token => token.formatted > 0)
+        .map(token => ({
+          name: token.symbol,
+          tokenAmount: token.formatted.toFixed(6),
+          holdings: token.formatted.toFixed(2),
+          apy: (pools.find(p => p.token0Symbol === token.symbol || p.token1Symbol === token.symbol)?.apy || 0).toFixed(2)
+        }))
+
+      setAssets(filteredAssets)
+      setTrades(trades)
+    } catch (err: any) {
+      console.error('Error fetching data:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateAverageApy = (pools: Pool[], tokens: Token[]) => {
+    if (!tokens.length) return 0
+    
+    const relevantPools = pools.filter(pool => 
+      tokens.some(token => 
+        pool.token0Symbol === token.symbol || pool.token1Symbol === token.symbol
+      )
+    )
+
+    if (!relevantPools.length) return 0
+
+    const totalApy = relevantPools.reduce((sum, pool) => sum + pool.apy, 0)
+    return totalApy / relevantPools.length
+  }
+
+  useEffect(() => {
+    if (address) {
+      fetchData()
+    }
+  }, [address, showAgentAssets])
 
   return (
     <>
@@ -205,47 +404,102 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-4 mb-8 w-full">
           {stats.map((stat, index) => (
-            <StatsCard key={index} {...stat} />
+            <StatsCard key={index} title={stat.title} value={stat.value} isApy={stat.isApy} />
           ))}
         </div>
 
         {/* Assets Section */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Assets</h2>
-          <div className="space-y-3">
-            {assets.map((asset, index) => (
-              <AssetRow key={index} asset={asset} />
-            ))}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Assets</h2>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {showAgentAssets ? 'Agent' : 'User'} Assets
+                </span>
+                <Switch
+                  checked={showAgentAssets}
+                  onCheckedChange={setShowAgentAssets}
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* My Agent Section */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">My Agent</h2>
-          <div className="space-y-3">
-            {agents.map((agent, index) => (
-              <AgentRow key={index} agent={agent} />
-            ))}
+          <div className="space-y-4">
+            {loading ? (
+              <AmountSkeleton />
+            ) : assets.length > 0 ? (
+              <>
+                {(showAllAssets ? assets : assets.slice(0, 4)).map((asset, index) => (
+                  <AssetRow key={index} asset={asset} />
+                ))}
+                {assets.length > 4 && (
+                  <div className="text-center mt-4">
+                    <button
+                      onClick={() => setShowAllAssets(!showAllAssets)}
+                      className="text-primary-500 hover:text-primary-600 dark:text-primary-400 
+                               dark:hover:text-primary-300 font-medium"
+                    >
+                      {showAllAssets ? 'Show Less' : `Show All (${assets.length})`}
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">No assets found.</p>
+            )}
           </div>
         </div>
 
         {/* Trade History Section */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Trade History</h2>
-          <div className="space-y-3">
-            {trades.map((trade, index) => (
-              <TradeRow key={index} trade={trade} />
-            ))}
+        <div className="backdrop-blur-sm bg-gray-900/50 rounded-xl shadow-sm border border-gray-800/50">
+          <div className="p-6 border-b border-gray-800/50">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-semibold text-white">Trade History</h2>
+              <p className="text-sm text-gray-400">Click on a trade for more details</p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-gray-800/50">
+            {loading ? (
+              <div className="p-6">
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                </div>
+              </div>
+            ) : trades.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-gray-400">No trade history found</p>
+              </div>
+            ) : (
+              trades.map((trade: any, index: number) => (
+                <div
+                  key={`${trade.txHash}-${index}`}
+                  onClick={() => {
+                    setSelectedTrade(trade)
+                    setIsTradeModalOpen(true)
+                  }}
+                  className="hover:bg-gray-800/50 transition-colors cursor-pointer"
+                >
+                  <TradeRow trade={trade} onClick={() => {}} />
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
 
+      <TradeDetailsModal
+        isOpen={isTradeModalOpen}
+        onClose={() => setIsTradeModalOpen(false)}
+        trade={selectedTrade}
+      />
       <CreateAgentModal 
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
       />
     </>
   )
-} 
+}
