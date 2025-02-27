@@ -3,6 +3,12 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { XMarkIcon, InformationCircleIcon, ChartBarIcon, ShieldCheckIcon, ClockIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline'
+import { useAccount, useWalletClient } from 'wagmi'
+import { ethers } from 'ethers'
+import { walletClientToSigner } from '@/utils/wallet'
+import { TOKENS } from '@/constants/tokens'
+import { SPINOR_ROUTER_ADDRESS, SPINOR_FACTORY_ADDRESS } from '@/constants/contracts'
+import { SPINOR_AGENT_ABI } from '@/constants/abis'
 
 // Enums
 enum TradeStrategy {
@@ -137,6 +143,12 @@ interface CreateAgentModalProps {
   onClose: () => void
 }
 
+interface Step {
+  label: string
+  status: 'pending' | 'loading' | 'completed' | 'error'
+  hash?: string
+}
+
 // Strategy Card Component
 const StrategyCard = ({ strategy, selected, onClick }: any) => (
   <motion.button
@@ -230,7 +242,13 @@ const DurationButton = ({ duration, selected, onClick }: any) => (
   </motion.button>
 )
 
+// Add SpinorAgent ABI at the top
+const SPINOR_AGENT_BYTECODE = "0x608060405234801561001057600080fd5b50604051610a1f380380610a1f833981810160405281019061003291906100d9565b336000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555084600160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555083600260006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555082600360006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555081600481905550806005819055506000600660006101000a81548160ff0219169083151502179055506000600781905550610165565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006100a68261007b565b9050919050565b6100b68161009b565b81146100c157600080fd5b50565b6000819050919050565b6100d7816100c4565b81146100e257600080fd5b50565b600080fd5b61089b806101746000396000f3fe608060405234801561001057600080fd5b50600436106100935760003560e01c80638456cb591161006657806384";
+
 export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalProps) {
+  const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  
   const [formData, setFormData] = useState({
     name: '',
     strategy: '',
@@ -241,6 +259,21 @@ export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalPr
 
   const [estimatedEarnings, setEstimatedEarnings] = useState('$0.00')
   const [currentStep, setCurrentStep] = useState(1)
+  const [error, setError] = useState('')
+  const [deploymentSteps, setDeploymentSteps] = useState<Step[]>([
+    { label: 'Deploy Agent Contract', status: 'pending' },
+    { label: 'Approve USDC', status: 'pending' },
+    { label: 'Deposit USDC', status: 'pending' }
+  ])
+  const [isDeploying, setIsDeploying] = useState(false)
+
+  const updateStep = (index: number, status: Step['status'], hash?: string) => {
+    setDeploymentSteps(steps => 
+      steps.map((step, i) => 
+        i === index ? { ...step, status, hash } : step
+      )
+    )
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -256,11 +289,114 @@ export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalPr
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log('Form submitted:', formData)
-    onClose()
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsDeploying(true);
+
+    try {
+      // Create agent via API
+      updateStep(0, 'loading');
+      const response = await fetch('/api/create-agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          tradeStrategy: formData.strategy,
+          riskLevel: formData.riskLevel,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to create agent');
+      }
+
+      const agentAddress = data.data.address;
+      updateStep(0, 'completed');
+
+      // Get signer
+      if (!walletClient) throw new Error('Wallet not connected');
+      const signer = await walletClientToSigner(walletClient);
+
+      // Approve USDC
+      updateStep(1, 'loading');
+      const usdcContract = new ethers.Contract(
+        TOKENS.USDC.address, 
+        ['function approve(address spender, uint256 amount) external'], 
+        signer
+      );
+      
+      const amount = ethers.parseUnits('1000', TOKENS.USDC.decimals);
+      const approveTx = await usdcContract.approve(agentAddress, amount);
+      await approveTx.wait();
+      updateStep(1, 'completed');
+
+      // Deposit USDC
+      updateStep(2, 'loading');
+      const agentContract = new ethers.Contract(
+        agentAddress, 
+        [
+          'function deposit(address token, uint256 amount) external',
+          'function setDuration(uint256 _duration) external',
+          'function start() external',
+          'function owner() external view returns (address)',
+          'function tradeStrategy() external view returns (uint8)',
+          'function riskLevel() external view returns (uint8)',
+          'function isActive() external view returns (bool)',
+          'function duration() external view returns (uint256)',
+          'function pause() external',
+          'function unpause() external'
+        ], 
+        signer
+      );
+
+      // Pause agent before deposit
+      const pauseTx = await agentContract.pause();
+      await pauseTx.wait();
+
+      // Deposit USDC
+      const depositTx = await agentContract.deposit(TOKENS.USDC.address, amount);
+      await depositTx.wait();
+
+      // Set duration based on selection
+      let durationInSeconds = 24 * 60 * 60; // Default 1 day
+      switch (formData.duration) {
+        case '1w':
+          durationInSeconds = 7 * 24 * 60 * 60; // 1 week
+          break;
+        case '1m':
+          durationInSeconds = 30 * 24 * 60 * 60; // 1 month
+          break;
+        case '3m':
+          durationInSeconds = 90 * 24 * 60 * 60; // 3 months
+          break;
+      }
+
+      const setDurationTx = await agentContract.setDuration(durationInSeconds);
+      await setDurationTx.wait();
+
+      // Unpause agent after deposit and duration set
+      const unpauseTx = await agentContract.unpause();
+      await unpauseTx.wait();
+
+      updateStep(2, 'completed');
+
+      // Refresh page after success
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (err: any) {
+      console.error('Create agent error:', err);
+      setError(err.message || 'Failed to create agent');
+      updateStep(currentStep, 'error');
+    } finally {
+      setIsDeploying(false);
+    }
+  };
 
   const getStepContent = () => {
     switch (currentStep) {
@@ -360,7 +496,7 @@ export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalPr
                            border border-white/20 dark:border-gray-700/30 font-medium text-gray-900 
                            dark:text-white min-w-[100px] text-center"
                 >
-                  TIA
+                  USDC
                 </motion.button>
               </div>
             </div>
@@ -391,7 +527,7 @@ export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalPr
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Investment</span>
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {formData.tokenAmount ? `${formData.tokenAmount} TIA` : '-'}
+                    {formData.tokenAmount ? `${formData.tokenAmount} USDC` : '-'}
                   </span>
                 </div>
                 <div className="pt-4 border-t border-gray-100/20 dark:border-white/[0.08]">
@@ -464,42 +600,96 @@ export default function CreateAgentModal({ isOpen, onClose }: CreateAgentModalPr
 
                 {/* Content */}
                 <div className="mb-8">
-                  {getStepContent()}
+                  {!isDeploying ? (
+                    <>
+                      {getStepContent()}
+                    </>
+                  ) : (
+                    <div className="space-y-6">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                        Creating Your Agent
+                      </h3>
+                      
+                      {/* Deployment Steps */}
+                      <div className="space-y-4">
+                        {deploymentSteps.map((step, index) => (
+                          <div key={index} className="flex items-center justify-between p-4 bg-white/30 
+                                                    dark:bg-white/[0.02] rounded-xl">
+                            <div className="flex items-center gap-3">
+                              {step.status === 'loading' && (
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-500" />
+                              )}
+                              {step.status === 'completed' && (
+                                <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                              {step.status === 'error' && (
+                                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
+                              <span className="text-gray-900 dark:text-white">{step.label}</span>
+                            </div>
+                            {step.hash && (
+                              <a
+                                href={`https://testnet.abc.com/tx/${step.hash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary-500 hover:text-primary-600"
+                              >
+                                View Transaction
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {error && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                          <p className="text-sm text-red-500">{error}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="flex justify-between">
-                  {currentStep > 1 ? (
+                {!isDeploying && (
+                  <div className="flex justify-between mt-8">
+                    {currentStep > 1 ? (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setCurrentStep(currentStep - 1)}
+                        className="px-6 py-3 bg-white/30 dark:bg-white/[0.02] backdrop-blur-lg rounded-xl 
+                                 border border-white/20 dark:border-gray-700/30 font-medium text-gray-900 
+                                 dark:text-white hover:bg-white/40 dark:hover:bg-white/[0.03] transition-colors duration-150"
+                      >
+                        Previous
+                      </motion.button>
+                    ) : (
+                      <div />
+                    )}
+                    
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setCurrentStep(currentStep - 1)}
-                      className="px-6 py-3 bg-white/30 dark:bg-white/[0.02] backdrop-blur-lg rounded-xl 
-                               border border-white/20 dark:border-gray-700/30 font-medium text-gray-900 
-                               dark:text-white hover:bg-white/40 dark:hover:bg-white/[0.03] transition-colors duration-150"
+                      onClick={() => {
+                        if (currentStep < 3) {
+                          setCurrentStep(currentStep + 1)
+                        } else {
+                          handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                        }
+                      }}
+                      disabled={isDeploying}
+                      className="px-6 py-3 bg-primary-500/80 text-white rounded-xl font-medium 
+                               hover:bg-primary-600/80 transition-colors duration-150 disabled:opacity-50"
                     >
-                      Previous
+                      {currentStep === 3 ? 'Create Agent' : 'Next'}
                     </motion.button>
-                  ) : (
-                    <div />
-                  )}
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      if (currentStep < 3) {
-                        setCurrentStep(currentStep + 1)
-                      } else {
-                        handleSubmit({ preventDefault: () => {} } as React.FormEvent)
-                      }
-                    }}
-                    className="px-6 py-3 bg-primary-500/80 text-white rounded-xl font-medium 
-                             hover:bg-primary-600/80 transition-colors duration-150"
-                  >
-                    {currentStep === 3 ? 'Create Agent' : 'Next'}
-                  </motion.button>
-                </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>

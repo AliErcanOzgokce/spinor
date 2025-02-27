@@ -4,6 +4,7 @@ import "@nomiclabs/hardhat-ethers";
 import "@openzeppelin/hardhat-upgrades";
 import * as dotenv from "dotenv";
 import "./scripts/core/updateStrategy";
+import "./scripts/core/createAgent";
 
 dotenv.config();
 
@@ -15,7 +16,8 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200
       },
-      viaIR: true
+      viaIR: true,
+      evmVersion: "paris"
     }
   },
   networks: {
@@ -26,13 +28,19 @@ const config: HardhatUserConfig = {
       url: "http://127.0.0.1:8545"
     },
     abc: {
-      url: process.env.RPC_URL,
-      accounts: [process.env.PRIVATE_KEY]
+      url: process.env.RPC_URL || "",
+      accounts: [process.env.PRIVATE_KEY || ""],
+      gasPrice: "auto",
+      gas: 2100000,
+      timeout: 60000
     },
     abc_testnet: {
       url: "https://rpc.abc.t.raas.gelato.cloud",
       chainId: 112,
-      accounts: [process.env.PRIVATE_KEY || ""]
+      accounts: [process.env.PRIVATE_KEY || ""],
+      gasPrice: "auto",
+      gas: 2100000,
+      timeout: 60000
     }
   },
   paths: {

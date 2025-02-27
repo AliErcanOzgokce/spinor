@@ -1,3 +1,50 @@
 {
-    "aliAI": "0x1151180290CAa1Ab4e3d9d9E5C226Af6259b7f87"
+  "TestAgent": {
+    "address": "0x895f0113148e64FeE64a36a3c891a8626E41c353",
+    "tradeStrategy": 2,
+    "riskLevel": 3,
+    "createdAt": "2025-02-27T21:13:36.785Z"
+  },
+  "Nativerse AI": {
+    "address": "0x7aF81C4f6e182DEc7FD3dAaEBAC1257d0b4BdA9E",
+    "tradeStrategy": 2,
+    "riskLevel": 3,
+    "createdAt": "2025-02-27T21:24:28.614Z"
+  },
+  "Test": {
+    "address": "0x939016EC47C17fE156c7E03Ae0Dd691d41827E15",
+    "tradeStrategy": 2,
+    "riskLevel": 3,
+    "createdAt": "2025-02-27T21:29:47.361Z"
+  },
+  "spinor": {
+    "address": "0x4888FBDE41e66bfa371a99EbB1cC108e6e6A4be5",
+    "tradeStrategy": 4,
+    "riskLevel": 4,
+    "createdAt": "2025-02-27T21:34:24.885Z"
+  },
+  "spi": {
+    "address": "0xef5a9974B64B267F3db4D08183931CCE81f87DCc",
+    "tradeStrategy": 5,
+    "riskLevel": 4,
+    "createdAt": "2025-02-27T21:41:58.233Z"
+  },
+  "spix": {
+    "address": "0x28046E6E40A7Cd9713d0A31fABA0F9a754918437",
+    "tradeStrategy": 5,
+    "riskLevel": 4,
+    "createdAt": "2025-02-27T21:46:50.932Z"
+  },
+  "BNA": {
+    "address": "0x2782021d55d8b4d59Af7f60B73103495C39346c0",
+    "tradeStrategy": 3,
+    "riskLevel": 4,
+    "createdAt": "2025-02-27T21:47:30.033Z"
+  },
+  "BNAX": {
+    "address": "0xe0EA912262033518336a0a27b4dDB82ADbBb6bAB",
+    "tradeStrategy": 3,
+    "riskLevel": 4,
+    "createdAt": "2025-02-27T21:52:00.892Z"
+  }
 }
