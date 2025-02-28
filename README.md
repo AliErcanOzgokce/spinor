@@ -4,6 +4,8 @@
 
 Spinor is a decentralized platform that enables users to create and manage their own AI-powered yield trading agents. By leveraging OpenAI for market analysis and Gelato Relayers for execution, Spinor optimizes returns across Liquid Staking Tokens (LSTs) and Liquid Restaking Tokens (LRTs).
 
+- [Demo Video](https://drive.google.com/file/d/1LQf-sGJeJ5aQgES-5jI-hSwJkcruWSDC/view?usp=sharing)
+
 ## Gelato Relay Integration
 
 SpinorAgent leverages Gelato Relay for gasless and automated trading. Here's how it works:
@@ -190,19 +192,25 @@ cd spinor
 - Twitter sentiment analysis integration
 - Real-time market data feeds
 - Enhanced risk management features
+- Public Testnet Launch
 
 ### Q4 2025
-- Public Testnet Launch
 - Advanced AI strategy customization
 - Adding other trading strategies
-- Improving Dashboard
+- Mainnet Launch
 
 ## 👥 Team
 
-- **Osman Gocer** - Smart Contract Development
-- **Ali Ercan Ozgokce** - Backend & AI Integration
-- **Zeynep Sude Kacar** - Frontend Development
+- **Osman Gocer** - Strategy & Growth
+- **Ali Ercan Ozgokce** - Fullstack Blockchain & AI Deveveloper
+- **Zeynep Sude Kacar** - Marketing & Community
 - **Mehmet Güngör** - Product & Strategy
+
+## 💥 Socials
+
+- [Twitter (Main)](https://x.com/0xspinor)
+- [Twitter (AI Bot)](https://x.com/Spinor_ai_bot)
+- [Waitlist](https://t.co/uEEnWOK0Uz)
 
 ## 📄 License
 
