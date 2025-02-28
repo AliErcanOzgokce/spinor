@@ -16,6 +16,9 @@ import { ethers } from 'ethers'
 import { getStrategyName, getRiskLevelName, getRiskLevelColor } from '@/utils/trade'
 import { AgentControlModal } from '@/components/dashboard/AgentControlModal'
 import { SPINOR_AGENT_ADDRESS } from '@/constants/contracts'
+import gelatoLogo from '@/assets/gelato.svg'
+import abcLogo from '@/assets/abc.png'
+import Image from 'next/image'
 
 interface Token {
   symbol: string
@@ -93,6 +96,42 @@ const getActionIcon = (type: string) => {
   }
 };
 
+// Custom Robot Icon Component
+const RobotIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    stroke="currentColor"
+  >
+    {/* Robot Head - Elliptical */}
+    <ellipse 
+      cx="12" 
+      cy="12" 
+      rx="8" 
+      ry="7" 
+      className="text-primary-500" 
+      strokeWidth={1.5} 
+    />
+    
+    {/* Robot Eyes */}
+    <circle cx="9" cy="11" r="1.2" className="text-primary-500" fill="currentColor" />
+    <circle cx="15" cy="11" r="1.2" className="text-primary-500" fill="currentColor" />
+    
+    {/* Smiling Mouth */}
+    <path
+      d="M9 14.5c3 1.5 6 0 6 0"
+      strokeLinecap="round"
+      strokeWidth={1.5}
+      className="text-primary-500"
+    />
+    
+    {/* Antenna */}
+    <line x1="12" y1="3" x2="12" y2="5" strokeWidth={1.5} className="text-primary-500" />
+    <circle cx="12" cy="3" r="0.5" className="text-primary-500" fill="currentColor" />
+  </svg>
+)
+
 // Stats Card Component
 const StatsCard = ({ title, value, isApy = false }: { title: string; value: string; isApy?: boolean }) => (
   <motion.div
@@ -121,13 +160,13 @@ const AssetRow = ({ asset }: { asset: any }) => (
   <motion.div
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
-    className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 
+    className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 h-[72px]
               border border-gray-100/20 dark:border-white/[0.08] hover:border-primary-500/20 
               dark:hover:border-primary-400/20 transition-colors duration-300"
   >
     {/* Token Icons */}
     <div className="flex -space-x-2 mr-4">
-      <div className="w-8 h-8 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center z-10">
+      <div className="w-9 h-9 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center z-10">
         <span className="text-xs font-medium text-primary-700 dark:text-primary-300">
           {asset.name.charAt(0)}
         </span>
@@ -137,23 +176,23 @@ const AssetRow = ({ asset }: { asset: any }) => (
     {/* Name and Holdings */}
     <div className="flex-1">
       <p className="font-medium text-gray-900 dark:text-white">{asset.name}</p>
-      <p className="text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-gray-500 dark:text-gray-400">
         {asset.tokenAmount} tokens
       </p>
     </div>
 
     {/* APY */}
     <div className="px-4 text-right">
-      <p className="text-sm text-gray-500 dark:text-gray-400">APY</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">APY</p>
       <div className="flex items-center justify-end gap-1 text-green-500 dark:text-green-400">
-        <ArrowTrendingUpIcon className="w-4 h-4" />
+        <ArrowTrendingUpIcon className="w-3 h-3" />
         <span className="font-medium">{asset.apy}%</span>
       </div>
     </div>
 
     {/* Holdings in USD */}
     <div className="w-32 text-right">
-      <p className="text-sm text-gray-500 dark:text-gray-400">Value</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Value</p>
       <p className="font-medium text-gray-900 dark:text-white">${asset.holdings}</p>
     </div>
   </motion.div>
@@ -164,53 +203,79 @@ const AgentRow = ({ agent, onManage }: { agent: AgentInfo; onManage: () => void 
   <motion.div
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
-    className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 
+    className="flex items-center bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl p-4 h-[72px]
               border border-gray-100/20 dark:border-white/[0.08] hover:border-primary-500/20 
               dark:hover:border-primary-400/20 transition-colors duration-300"
   >
-    {/* Icon */}
-    <div className="w-8 h-8 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center mr-4">
-      <span className="text-xs font-medium text-primary-700 dark:text-primary-300">A</span>
-    </div>
-
-    {/* Name and Strategy */}
-    <div className="flex-1">
-      <p className="font-medium text-gray-900 dark:text-white">{agent.name}</p>
-      <p className="text-sm text-gray-500">{getStrategyName(agent.strategy)}</p>
+    {/* Icon and Name Section */}
+    <div className="flex items-center gap-3 min-w-[200px]">
+      <div className="w-9 h-9 bg-primary-100 dark:bg-white/[0.08] rounded-full flex items-center justify-center">
+        <span className="text-sm font-medium text-primary-700 dark:text-primary-300">A</span>
+      </div>
+      <div>
+        <p className="font-medium text-gray-900 dark:text-white">{agent.name}</p>
+        <p className="text-xs text-gray-500">{getStrategyName(agent.strategy)}</p>
+      </div>
     </div>
 
     {/* Risk Level */}
-    <div className="w-32 text-center">
-      <p className={`font-medium ${getRiskLevelColor(agent.riskLevel)}`}>
+    <div className="min-w-[90px]">
+      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+        agent.riskLevel === 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+        agent.riskLevel === 1 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+      }`}>
         {getRiskLevelName(agent.riskLevel)}
-      </p>
+      </span>
     </div>
 
-    {/* Holdings */}
-    <div className="w-32 text-right">
-      <p className="font-medium text-gray-900 dark:text-white">${agent.holdings}</p>
-    </div>
+    {/* Holdings and Performance Section */}
+    <div className="flex items-center gap-6 flex-1">
+      <div className="min-w-[110px]">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Holdings</p>
+        <p className="font-medium text-gray-900 dark:text-white">${agent.holdings}</p>
+      </div>
 
-    {/* Profit */}
-    <div className="w-32 text-right">
-      <p className="font-medium text-green-500 dark:text-green-400">${agent.profit}</p>
-    </div>
+      <div className="min-w-[90px]">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Profit</p>
+        <p className="font-medium text-green-500 dark:text-green-400">${agent.profit}</p>
+      </div>
 
-    {/* Total P/L */}
-    <div className="w-32 text-right">
-      <p className="font-medium text-green-500 dark:text-green-400">{agent.totalPL}%</p>
+      <div className="min-w-[90px]">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Avarage APY</p>
+        <div className="flex items-center gap-1">
+          <ArrowTrendingUpIcon className="w-3 h-3 text-green-500" />
+          <p className="font-medium text-green-500 dark:text-green-400">{agent.totalPL}%</p>
+        </div>
+      </div>
     </div>
 
     {/* Manage Button */}
-    <div className="ml-4">
-      <button
-        onClick={onManage}
-        className="px-4 py-2 bg-primary-500 text-white rounded-lg font-medium 
-                 hover:bg-primary-600 transition-colors duration-200"
+    <button
+      onClick={onManage}
+      className="flex items-center gap-2 px-2 py-2 bg-primary-500 text-white rounded-lg
+                hover:bg-primary-600 transition-colors duration-200 ml-4"
+    >
+      <svg 
+        className="w-4 h-4" 
+        fill="none" 
+        viewBox="0 0 24 24" 
+        stroke="currentColor"
       >
-        Manage
-      </button>
-    </div>
+        <path 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          strokeWidth={2} 
+          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+        />
+        <path 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          strokeWidth={2} 
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+      </svg>
+    </button>
   </motion.div>
 )
 
@@ -267,6 +332,28 @@ const TradeRow = ({ trade, onClick }: { trade: any; onClick: () => void }) => {
               )}
             </div>
           )}
+          <div className="flex items-center gap-4 mt-1">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-white/10 overflow-hidden">
+                <Image 
+                  src={gelatoLogo} 
+                  alt="Gelato" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              <span className="text-xs text-gray-400">Powered by Gelato Relay</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-white/10 overflow-hidden">
+                <Image 
+                  src={abcLogo} 
+                  alt="ABC Network" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              <span className="text-xs text-gray-400">ABC Network</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -314,7 +401,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [trades, setTrades] = useState<any[]>([])
-  const [showAgentAssets, setShowAgentAssets] = useState(false)
+  const [showAgentAssets, setShowAgentAssets] = useState(true)
   const { address } = useAccount()
   const [error, setError] = useState<string | null>(null)
   const [showAllAssets, setShowAllAssets] = useState(false)
@@ -455,7 +542,7 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">User Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
           <div className="flex gap-4">
             <Link href="/pool/remove">
               <motion.button
@@ -488,86 +575,99 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Assets Section */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Assets</h2>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {showAgentAssets ? 'Agent' : 'User'} Assets
-                </span>
-                <Switch
-                  checked={showAgentAssets}
-                  onCheckedChange={setShowAgentAssets}
-                />
+        {/* Main Content Grid */}
+        <div className="space-y-8">
+          {/* Agents and Assets Row */}
+          <div className="grid grid-cols-12 gap-8">
+            {/* Left Column - Agents */}
+            <div className="col-span-7">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">My Agents</h2>
+                </div>
+
+                <div className="space-y-4">
+                  {loading ? (
+                    <AmountSkeleton />
+                  ) : agents.length > 0 ? (
+                    agents.map((agent, index) => (
+                      <AgentRow
+                        key={index}
+                        agent={agent}
+                        onManage={() => {
+                          setSelectedAgent(agent)
+                          setIsAgentModalOpen(true)
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400">No agents found.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column - Assets */}
+            <div className="col-span-5">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Assets</h2>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {showAgentAssets ? 'Agent' : 'User'} Assets
+                      </span>
+                      <Switch
+                        checked={showAgentAssets}
+                        onCheckedChange={setShowAgentAssets}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {loading ? (
+                    <AmountSkeleton />
+                  ) : assets.length > 0 ? (
+                    <>
+                      {(showAllAssets ? assets : assets.slice(0, 4)).map((asset, index) => (
+                        <AssetRow key={index} asset={asset} />
+                      ))}
+                      {assets.length > 4 && (
+                        <div className="text-center mt-4">
+                          <button
+                            onClick={() => setShowAllAssets(!showAllAssets)}
+                            className="text-primary-500 hover:text-primary-600 dark:text-primary-400 
+                                     dark:hover:text-primary-300 font-medium"
+                          >
+                            {showAllAssets ? 'Show Less' : `Show All (${assets.length})`}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400">No assets found.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {loading ? (
-              <AmountSkeleton />
-            ) : assets.length > 0 ? (
-              <>
-                {(showAllAssets ? assets : assets.slice(0, 4)).map((asset, index) => (
-                  <AssetRow key={index} asset={asset} />
-                ))}
-                {assets.length > 4 && (
-                  <div className="text-center mt-4">
-                    <button
-                      onClick={() => setShowAllAssets(!showAllAssets)}
-                      className="text-primary-500 hover:text-primary-600 dark:text-primary-400 
-                               dark:hover:text-primary-300 font-medium"
-                    >
-                      {showAllAssets ? 'Show Less' : `Show All (${assets.length})`}
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400">No assets found.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Agents Section */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">My Agents</h2>
-          </div>
-
-          <div className="space-y-4">
-            {loading ? (
-              <AmountSkeleton />
-            ) : agents.length > 0 ? (
-              agents.map((agent, index) => (
-                <AgentRow
-                  key={index}
-                  agent={agent}
-                  onManage={() => {
-                    setSelectedAgent(agent)
-                    setIsAgentModalOpen(true)
-                  }}
-                />
-              ))
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400">No agents found.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Trade History Section */}
-        <div className="backdrop-blur-sm bg-gray-900/50 rounded-xl shadow-sm border border-gray-800/50">
-          <div className="p-6 border-b border-gray-800/50">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold text-white">Trade History</h2>
-              <p className="text-sm text-gray-400">Click on a trade for more details</p>
+          {/* Trade History Section - Full Width */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Agent Trade History</h2>
+                <div className="w-12 h-12 bg-primary-500/10 rounded-xl flex items-center justify-center relative group">
+                  <div className="absolute inset-0 bg-primary-500/5 rounded-xl blur-xl group-hover:bg-primary-500/10 transition-all duration-300"></div>
+                  <RobotIcon className="w-8 h-8 text-primary-500 group-hover:text-primary-400 transition-colors duration-300" />
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="divide-y divide-gray-800/50">
-            {loading ? (
+            <div className="bg-white/40 dark:bg-white/[0.02] backdrop-blur-sm rounded-xl 
+                          border border-gray-100/20 dark:border-white/[0.08]">
+              {loading ? (
               <div className="p-6">
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
@@ -591,35 +691,26 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Modals */}
+      <CreateAgentModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
       <TradeDetailsModal
         isOpen={isTradeModalOpen}
         onClose={() => setIsTradeModalOpen(false)}
         trade={selectedTrade}
       />
-      <CreateAgentModal 
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+      <AgentControlModal
+        isOpen={isAgentModalOpen}
+        onClose={() => setIsAgentModalOpen(false)}
+        agent={selectedAgent}
       />
-
-      {/* Agent Control Modal */}
-      {selectedAgent && (
-        <AgentControlModal
-          isOpen={isAgentModalOpen}
-          onClose={() => setIsAgentModalOpen(false)}
-          agentAddress={selectedAgent.address}
-          currentStrategy={selectedAgent.strategy}
-          currentRiskLevel={selectedAgent.riskLevel}
-          isActive={selectedAgent.isActive}
-          onSuccess={() => {
-            setIsAgentModalOpen(false)
-            fetchData()
-          }}
-        />
-      )}
     </>
   )
 }

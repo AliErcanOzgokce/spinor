@@ -4,12 +4,53 @@ import { XMarkIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon, ArrowsRightLeftI
 import { formatUnits } from 'ethers'
 import { TOKENS } from '@/constants/tokens'
 import { getStrategyName, getRiskLevelName, getRiskLevelColor } from '@/utils/trade'
+import gelatoLogo from '@/assets/gelato.svg'
+import abcLogo from '@/assets/abc.png'
+import Image from 'next/image'
+
 
 interface TradeDetailsModalProps {
   isOpen: boolean
   onClose: () => void
   trade: any
 }
+
+// Custom Robot Icon Component
+const RobotIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    stroke="currentColor"
+  >
+    {/* Robot Head - Elliptical */}
+    <ellipse 
+      cx="12" 
+      cy="12" 
+      rx="8" 
+      ry="7" 
+      className="text-primary-500" 
+      strokeWidth={1.5} 
+    />
+    
+    {/* Robot Eyes */}
+    <circle cx="9" cy="11" r="1.2" className="text-primary-500" fill="currentColor" />
+    <circle cx="15" cy="11" r="1.2" className="text-primary-500" fill="currentColor" />
+    
+    {/* Smiling Mouth */}
+    <path
+      d="M9 14.5c3 1.5 6 0 6 0"
+      strokeLinecap="round"
+      strokeWidth={1.5}
+      className="text-primary-500"
+    />
+    
+    {/* Antenna */}
+    <line x1="12" y1="3" x2="12" y2="5" strokeWidth={1.5} className="text-primary-500" />
+    <circle cx="12" cy="3" r="0.5" className="text-primary-500" fill="currentColor" />
+  </svg>
+)
+
 
 const formatAmount = (amount: string, decimals: number) => {
   return parseFloat(formatUnits(amount, decimals)).toFixed(6)
@@ -251,6 +292,40 @@ export const TradeDetailsModal = ({ isOpen, onClose, trade }: TradeDetailsModalP
                           <p className="font-medium text-green-500">{trade.apy.toFixed(2)}% APY</p>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Powered By Section */}
+                  <div className="bg-gray-50 dark:bg-white/[0.02] rounded-xl p-4 space-y-4">
+                    {/* AI Agent Info */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-primary-500/10 flex items-center justify-center">
+                        <RobotIcon className="w-5 h-5 text-primary-500" />
+                      </div>
+                      <span className="text-sm text-gray-400">SpinorAgent executes this trade</span>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 dark:border-gray-800" />
+
+                    {/* Logos */}
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+                          <div className="w-6 h-6 rounded-full overflow-hidden">
+                            <Image src={gelatoLogo} alt="Gelato" className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-400">Powered by Gelato Relay</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+                          <div className="w-6 h-6 rounded-full overflow-hidden">
+                            <Image src={abcLogo} alt="ABC Network" className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-400">ABC Network</span>
+                      </div>
                     </div>
                   </div>
 

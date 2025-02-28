@@ -1,6 +1,45 @@
-# �� Spinor: AI-Powered Yield Trading Agent Platform
+![Spinor Cover](client/assets/cover.png)
+
+# Spinor: AI-Powered Yield Trading Agent Platform
 
 Spinor is a decentralized platform that enables users to create and manage their own AI-powered yield trading agents. By leveraging OpenAI for market analysis and Gelato Relayers for execution, Spinor optimizes returns across Liquid Staking Tokens (LSTs) and Liquid Restaking Tokens (LRTs).
+
+## Gelato Relay Integration
+
+SpinorAgent leverages Gelato Relay for gasless and automated trading. Here's how it works:
+
+### Sponsored Transactions
+- All AI agent trades are executed through Gelato's `sponsoredCall` feature
+- Transactions are sponsored by the protocol, meaning users don't need to pay gas fees
+- Each trade is securely processed and monitored through Gelato's infrastructure
+
+### Implementation Details
+- Uses Gelato Relay SDK for transaction submission
+- Handles both arbitrage and regular trading operations
+- Monitors transaction status and confirms execution
+- Automatically retries failed transactions
+
+### Security
+- Each transaction is validated before execution
+- Uses secure API keys for authentication
+- Implements proper error handling and transaction monitoring
+- Follows Gelato's security best practices
+
+### Example Usage
+```typescript
+// Create relay request
+const request = {
+  chainId: chainId,
+  target: contractAddress,
+  data: encodedFunctionData
+};
+
+// Submit transaction through Gelato
+const response = await relay.sponsoredCall(request, sponsorKey);
+
+// Monitor transaction status
+const taskStatus = await relay.getTaskStatus(response.taskId);
+```
 
 ## 🎯 Key Features
 
