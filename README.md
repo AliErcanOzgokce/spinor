@@ -130,50 +130,21 @@ spinor/
 
 ## 🚀 Quick Start
 
-1. Clone the repository:
-\`\`\`bash
+For detailed setup instructions, please refer to each component's README:
+
+- [AI Trader Setup Guide](ai-trader/README.md)
+- [Backend Setup Guide](backend/README.md)
+- [Frontend Setup Guide](client/README.md)
+- [Smart Contracts Setup Guide](hardhat/README.md)
+
+Basic setup steps:
+```bash
+# Clone the repository
 git clone https://github.com/AliErcanOzgokce/spinor.git
 cd spinor
-\`\`\`
 
-2. Set up each component:
-\`\`\`bash
-# AI Trader Setup
-cd ai-trader
-npm install
-cp .env.example .env
-
-# Backend Setup
-cd ../backend
-npm install
-cp .env.example .env
-
-# Client Setup
-cd ../client
-npm install
-cp .env.example .env
-
-# Hardhat Setup
-cd ../hardhat
-npm install
-cp .env.example .env
-\`\`\`
-
-3. Start the services:
-\`\`\`bash
-# Start AI Trader
-cd ai-trader
-npm run start
-
-# Start Backend
-cd ../backend
-npm run dev     # Start server
-npm run bot     # Start swap bot
-
-# Start Client
-cd ../client
-npm run dev
-\`\`\`
+# Follow the setup instructions in each component's README
+```
 
 ## 🔌 API Endpoints
 
