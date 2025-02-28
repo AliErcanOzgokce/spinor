@@ -4,5 +4,11 @@
     "tradeStrategy": 1,
     "riskLevel": 4,
     "createdAt": "2025-02-27T22:43:29.083Z"
+  },
+  "Test Agent": {
+    "address": "0x209D19FcfdCd4243E66A9dEBac7B62A93aCeaABC",
+    "tradeStrategy": 4,
+    "riskLevel": 2,
+    "createdAt": "2025-02-27T23:24:37.881Z"
   }
 }

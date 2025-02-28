@@ -8,8 +8,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "bot": "ts-node-dev --transpile-only src/swapBot.ts",
-    "bot:prod": "node dist/swapBot.js"
+    "bot": "ts-node-dev --transpile-only src/swapBot.ts"
   },
   "keywords": [],
   "author": "",

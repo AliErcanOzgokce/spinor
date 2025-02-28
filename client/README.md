@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎨 Spinor Frontend Client
 
-## Getting Started
+The Spinor Frontend Client provides a modern and intuitive interface for users to create and manage their AI trading agents, monitor performance, and interact with the Spinor platform.
 
-First, run the development server:
+## 🎯 Features
 
+- **Agent Creation**: Easy setup of AI trading agents
+- **Strategy Management**: Configure trading strategies and risk levels
+- **Performance Dashboard**: Real-time monitoring of trading activities
+- **Portfolio Overview**: Track balances and positions
+- **Transaction History**: Detailed trade history and analytics
+
+
+## 🚀 Getting Started
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Start the development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📱 Pages
 
-## Learn More
+### Dashboard (/dashboard)
+- Agent overview
+- Performance metrics
+- Balance tracking
+- Strategy configuration
 
-To learn more about Next.js, take a look at the following resources:
+### Swap (/swap)
+- Token swapping interface
+- Price information
+- Slippage settings
+- Transaction confirmation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Pool (/pool)
+- Liquidity pool management
+- Pool statistics
+- Yield information
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+#### Add Liquidity (/pool/add)
+- Add liquidity to pools
+- Token pair selection
+- Amount configuration
+- Price range settings
 
-## Deploy on Vercel
+#### Remove Liquidity (/pool/remove)
+- Remove liquidity from pools
+- LP token management
+- Withdrawal options
+- Position closing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🔌 API Integration
+
+### Agent APIs
+- `GET /api/agents`
+  - List all agents
+
+### Trade History
+- `GET /api/trade-history`
+  - Transaction details
+  - Performance metrics
+  - Filter by date range
+
+### User Balances
+- `GET /api/user-balances`
+  - Token balances
+  - USDC balance
+  - LP positions
+
+
+
+## 📦 Dependencies
+
+Core:
+- Next.js 15.1.6
+- React 19.0.0
+- Ethers.js 6.13.5
+- Wagmi 2.14.11
+- Viem 2.23.4
+- @reown/appkit 1.6.8
+- @reown/appkit-adapter-wagmi 1.6.8
+- @tanstack/react-query 5.66.9
+- Framer Motion 12.4.7
+
+UI Components:
+- @headlessui/react 2.2.0
+- @heroicons/react 2.2.0
+- @radix-ui/react-* (Dialog, Dropdown-Menu, Icons, Slot, Toast)
+- Tailwind CSS 3.4.1
+- class-variance-authority 0.7.1
+- tailwind-merge 3.0.1
+- tailwindcss-animate 1.0.7
+
+Development:
+- TypeScript 5
+- @types/node 20
+- @types/react 19
+- @types/react-dom 19
+- PostCSS 8
+
+
+
